@@ -523,6 +523,51 @@ input[type="radio"] {
   margin: 0;
 }
 
+/*
+ * The summary prose as it arrives. Proportional type, not monospace: this is the answer being read,
+ * not machine output being inspected.
+ */
+.stream-prose {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+/*
+ * Indeterminate pulse for the window before the first token. 1.2-1.6 s of silence reads as a frozen
+ * UI, and a percentage would be a lie: the client knows bytes are coming, not how many.
+ */
+.stream-pulse {
+  height: 0.6rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-muted) 0%,
+    var(--border-subtle) 50%,
+    var(--surface-muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: stream-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes stream-pulse {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Respect the system preference: an indefinite animation is the first thing to switch off. */
+@media (prefers-reduced-motion: reduce) {
+  .stream-pulse {
+    animation: none;
+    background: var(--border-subtle);
+  }
+}
+
 .insight {
   margin-top: var(--space-4);
 }

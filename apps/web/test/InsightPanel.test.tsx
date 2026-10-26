@@ -63,11 +63,12 @@ describe("InsightPanel", () => {
     expect(screen.getByText(insight.disclaimer)).toBeInTheDocument();
   });
 
-  it("replaces the raw stream with the structured view", async () => {
+  it("shows the summary prose growing and never the raw JSON while streaming", async () => {
     const user = userEvent.setup();
-    const insight = makeInsight();
+    const insight = makeInsight({ summary: "Tu energía ha subido esta semana." });
+    // The provider streams a JSON document, not prose: this is the shape the panel receives.
     const { response, open } = gatedSseResponse(
-      'event: token\ndata: {"delta":"Texto en crudo"}\n\n',
+      `event: token\ndata: ${JSON.stringify({ delta: '{\n  "summary": "Tu energía ha' })}\n\n`,
       `event: insight\ndata: ${JSON.stringify(insight)}\n\n`,
     );
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
@@ -75,13 +76,40 @@ describe("InsightPanel", () => {
     render(<InsightPanel />);
     await user.click(screen.getByRole("button", { name: "Generar insight" }));
 
-    expect(await screen.findByText("Texto en crudo")).toBeInTheDocument();
-    expect(screen.getByText("generando…")).toBeInTheDocument();
+    // Only the prose that already arrived is rendered. Returning the raw delta would put
+    // `{"summary": "` on screen, which is exactly the bug this pins.
+    expect(await screen.findByText("Tu energía ha")).toBeInTheDocument();
+    expect(screen.queryByText(/"summary"/)).toBeNull();
+    expect(document.body.textContent).not.toContain("{");
 
     open();
 
-    await waitFor(() => expect(screen.queryByText("Texto en crudo")).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/generando…/)).toBeNull());
     expect(screen.getByText(insight.summary)).toBeInTheDocument();
+  });
+
+  it("announces work with a pulse while the first token has not arrived", async () => {
+    const user = userEvent.setup();
+    const insight = makeInsight();
+    // First chunk is only the opening brace: the summary value has not started yet.
+    const { response, open } = gatedSseResponse(
+      `event: token\ndata: ${JSON.stringify({ delta: "{" })}\n\n`,
+      `event: insight\ndata: ${JSON.stringify(insight)}\n\n`,
+    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    render(<InsightPanel />);
+    await user.click(screen.getByRole("button", { name: "Generar insight" }));
+
+    expect(await screen.findByText("generando…")).toBeInTheDocument();
+    const pulse = screen.getByRole("progressbar", { name: /generando/i });
+    expect(pulse).toBeInTheDocument();
+    // An indeterminate pulse is honest; a percentage would be invented.
+    expect(pulse.getAttribute("aria-valuenow")).toBeNull();
+
+    open();
+
+    await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull());
   });
 
   it("shows the INSUFFICIENT_DATA copy for that error code", async () => {

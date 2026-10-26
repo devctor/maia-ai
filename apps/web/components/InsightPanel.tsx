@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { INSIGHT_LIST_MAX_ITEMS, type ErrorCode, type Insight } from "@maia/contracts";
 import { ApiError, isAbortError, streamInsight } from "@/lib/api";
+import { extractSummaryProse } from "@/lib/summary-prose";
 import { Disclaimer } from "./Disclaimer";
 
 interface InsightPanelProps {
@@ -34,7 +35,11 @@ function describeError(error: ApiError): string {
 export function InsightPanel({ initialInsight = null, title = "Insight con IA" }: InsightPanelProps) {
   const [status, setStatus] = useState<Status>(initialInsight ? "done" : "idle");
   const [insight, setInsight] = useState<Insight | null>(initialInsight);
-  const [rawText, setRawText] = useState<string>("");
+  // The model streams a JSON document, so the raw text is kept as it arrives and only the summary
+  // prose it already contains is rendered. Kept in a ref as well because the rendered value is
+  // derived: the raw buffer is an implementation detail of getting readable text on screen.
+  const rawBufferRef = useRef<string>("");
+  const [prose, setProse] = useState<string>("");
   const [error, setError] = useState<ApiError | null>(null);
   const [cancelled, setCancelled] = useState<boolean>(false);
   const [includeNotes, setIncludeNotes] = useState<boolean>(false);
@@ -42,7 +47,8 @@ export function InsightPanel({ initialInsight = null, title = "Insight con IA" }
 
   async function handleGenerate(): Promise<void> {
     setStatus("streaming");
-    setRawText("");
+    rawBufferRef.current = "";
+    setProse("");
     setError(null);
     setCancelled(false);
 
@@ -53,7 +59,10 @@ export function InsightPanel({ initialInsight = null, title = "Insight con IA" }
       await streamInsight({
         includeNotes,
         signal: controller.signal,
-        onDelta: (delta) => setRawText((current) => current + delta),
+        onDelta: (delta) => {
+          rawBufferRef.current += delta;
+          setProse(extractSummaryProse(rawBufferRef.current));
+        },
         onInsight: (next) => {
           setInsight(next);
           setStatus("done");
@@ -120,8 +129,16 @@ export function InsightPanel({ initialInsight = null, title = "Insight con IA" }
       {status === "streaming" ? (
         <div className="stream" role="status" aria-live="polite">
           <p className="stream-status">generando…</p>
-          {/* Raw model text: rendered as plain text, never as HTML. */}
-          <pre className="stream-text">{rawText}</pre>
+          {/*
+            While the first token has not arrived there is nothing to read, and a static label does
+            not distinguish "working" from "stuck". The pulse is deliberately indeterminate: we
+            know bytes are coming, we do not know how many.
+          */}
+          {prose.length === 0 ? (
+            <div className="stream-pulse" role="progressbar" aria-label="Generando el insight" />
+          ) : (
+            <p className="stream-prose">{prose}</p>
+          )}
         </div>
       ) : null}
 
