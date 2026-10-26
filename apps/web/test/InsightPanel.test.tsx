@@ -61,7 +61,7 @@ describe("InsightPanel", () => {
     expect(screen.getByText("Más energía los días con mejor sueño")).toBeInTheDocument();
     expect(screen.getByText("Temas para comentar con un profesional")).toBeInTheDocument();
     expect(screen.getByText("Cómo mantener una rutina de sueño constante")).toBeInTheDocument();
-    expect(screen.getByText(/Generado con mock/)).toBeInTheDocument();
+    expect(screen.queryByText(/Generado con mock/)).not.toBeInTheDocument();
     expect(screen.getByText(insight.disclaimer)).toBeInTheDocument();
   });
 

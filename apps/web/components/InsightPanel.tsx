@@ -196,9 +196,6 @@ export function InsightPanel({
                 <p className="hint">No hay temas propuestos para estos días.</p>
               )}
 
-              <p className="footnote">
-                Generado con {insight.provider} · {insight.model}
-              </p>
               <Disclaimer text={insight.disclaimer} />
             </div>
           ) : null}
