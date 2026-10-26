@@ -40,4 +40,6 @@ COPY --from=build /app/apps/web/public apps/web/public
 USER app
 EXPOSE 3000
 WORKDIR /app/apps/web
-CMD ["node", "../../node_modules/next/dist/bin/next", "start", "--port", "3000", "--hostname", "0.0.0.0"]
+# `next` is resolved from the package's own node_modules: under pnpm it is a symlink into the
+# store, so addressing it by a relative path from the workspace root would not resolve.
+CMD ["node", "node_modules/next/dist/bin/next", "start", "--port", "3000", "--hostname", "0.0.0.0"]

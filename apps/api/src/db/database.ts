@@ -37,7 +37,12 @@ export function createDatabase(connectionString: string): DatabaseConnection {
  */
 export function resolveMigrationsFolder(): string {
   const candidates = [
+    // Production image: nest copies the folder into dist, and the entrypoint runs from dist/db.
+    path.join(__dirname, "drizzle"),
+    path.join(__dirname, "..", "drizzle"),
+    // Development: the source tree's drizzle folder, two levels above src/db.
     path.join(__dirname, "..", "..", "drizzle"),
+    // Whatever working directory the process was started from.
     path.join(process.cwd(), "drizzle"),
     path.join(process.cwd(), "apps", "api", "drizzle"),
   ];
