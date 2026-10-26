@@ -885,20 +885,6 @@ input[type="radio"] {
   color: rgba(255, 255, 255, 0.75);
 }
 
-.dashboard-cta {
-  align-self: flex-start;
-  padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius);
-  background: var(--lime);
-  color: var(--accent-strong);
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.dashboard-cta:hover {
-  background: #e3fdc6;
-}
-
 /* The reference ends the form with one wide primary action. */
 .dashboard .form > .button {
   width: 100%;

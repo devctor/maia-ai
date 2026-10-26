@@ -179,9 +179,6 @@ export function Dashboard({ initialCheckIns, initialInsight, notice }: Dashboard
               ? "Todavía no hay registros: el primero pone la escala en marcha."
               : `Media de tus ${dayCount} ${dayCount === 1 ? "registro" : "registros"} sobre una escala de 1 a 5.`}
           </p>
-          <a className="dashboard-cta" href="#dashboard-registro">
-            Registrar el día de hoy
-          </a>
         </section>
       </main>
     </div>
