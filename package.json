@@ -1,0 +1,32 @@
+{
+  "name": "maia-care",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.30.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm --filter @maia/contracts build && pnpm --filter @maia/api build && pnpm --filter @maia/web build",
+    "dev": "pnpm --filter @maia/contracts build && pnpm --parallel --filter @maia/api --filter @maia/web dev",
+    "dev:api": "pnpm --filter @maia/contracts build && pnpm --filter @maia/api dev",
+    "dev:web": "pnpm --filter @maia/contracts build && pnpm --filter @maia/web dev",
+    "db:up": "docker compose up -d --wait postgres",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @maia/api db:generate",
+    "db:migrate": "pnpm --filter @maia/api db:migrate",
+    "db:seed": "pnpm --filter @maia/api db:seed",
+    "typecheck": "pnpm --filter @maia/contracts build && pnpm -r typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "pnpm -r --sequential test",
+    "test:e2e": "pnpm --filter @maia/api test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  }
+}

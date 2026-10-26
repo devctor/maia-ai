@@ -1,0 +1,19 @@
+# ---------------------------------------------------------------- workspace files
+node_modules/
+dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------- local config
+.env
+.env.local
+.env.*.local
+
+# ---------------------------------------------------------------- tooling
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.atl/.skill-registry.cache.json

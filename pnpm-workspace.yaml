@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 10 blocks dependency postinstall scripts by default. These are the only ones the
+# workspace needs; approving them here keeps installs reproducible instead of per-machine.
+onlyBuiltDependencies:
+  - "@nestjs/core"
+  - esbuild
+  - sharp
+  - unrs-resolver
