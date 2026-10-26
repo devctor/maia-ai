@@ -13,10 +13,28 @@ import { z } from "zod";
 import { isRecord } from "./utils";
 
 /**
- * The API the browser talks to. It is public by definition: the client calls the API directly, so
- * the URL has to be inlined at build time. The default keeps the app usable with no env file.
+ * The browser-facing API the client calls. It is public by definition: the client calls the API
+ * directly, so the URL has to be inlined at build time. The default keeps the app usable with no
+ * env file.
  */
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+
+/**
+ * The base URL used by whoever is running this code right now.
+ *
+ * `API_URL` is a host-facing address, because that is the only kind a browser can use: it resolves
+ * on the reader's machine. The server rendering of the page is a different vantage point — under
+ * compose it runs inside the web container, where `localhost` is that container and the published
+ * host port is not reachable at all. `API_URL_INTERNAL` therefore names the API on whatever network
+ * the server lives in, and stays server-side: reading a non-`NEXT_PUBLIC_` variable is inlined into
+ * the server bundle only, never shipped to the browser.
+ */
+export function apiBaseUrl(): string {
+  if (typeof window === "undefined") {
+    return process.env.API_URL_INTERNAL ?? API_URL;
+  }
+  return API_URL;
+}
 
 /**
  * Every failure the API reports comes in the same envelope, so the UI can switch on a stable code
@@ -98,7 +116,7 @@ function contractMismatch(what: string): ApiError {
 }
 
 export async function listCheckIns(limit = 30): Promise<CheckIn[]> {
-  const response = await fetch(`${API_URL}/check-ins?limit=${limit}`, {
+  const response = await fetch(`${apiBaseUrl()}/check-ins?limit=${limit}`, {
     headers: { accept: "application/json" },
     cache: "no-store",
   });
@@ -113,7 +131,7 @@ export async function listCheckIns(limit = 30): Promise<CheckIn[]> {
 }
 
 export async function createCheckIn(input: CreateCheckInInput): Promise<CheckIn> {
-  const response = await fetch(`${API_URL}/check-ins`, {
+  const response = await fetch(`${apiBaseUrl()}/check-ins`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify(input),
@@ -130,7 +148,7 @@ export async function createCheckIn(input: CreateCheckInInput): Promise<CheckIn>
 
 /** The latest stored insight, or `null` when the user has never generated one. */
 export async function getLatestInsight(): Promise<Insight | null> {
-  const response = await fetch(`${API_URL}/insights/latest`, {
+  const response = await fetch(`${apiBaseUrl()}/insights/latest`, {
     headers: { accept: "application/json" },
     cache: "no-store",
   });
@@ -219,7 +237,7 @@ export async function streamInsight(handlers: StreamInsightHandlers): Promise<vo
 
   let response: Response;
   try {
-    response = await fetch(`${API_URL}/insights/stream`, {
+    response = await fetch(`${apiBaseUrl()}/insights/stream`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "text/event-stream" },
       body: JSON.stringify({ includeNotes }),

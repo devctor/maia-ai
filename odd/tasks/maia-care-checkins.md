@@ -35,6 +35,7 @@ Deliverable: working app, runnable with or without an AI API key, plus a README 
 | T10 | S13 | README with the five required sections | inline |
 | T11 | S10 | Final verification: typecheck, lint, full suite, real Gemini smoke | verifier |
 | T12 | S7 | Harden the error envelope: extract a single `describeError`/`toErrorResponse` translation, stop forwarding 5xx `HttpException` payloads, normalise non-`Error` throws before logging, drop the Express request augmentation, reuse the translation in the SSE endpoint, and add the guarded `DiagnosticsController` that makes these guarantees observable | inline |
+| T13 | S2, S12 | Serve the API to the caller that is asking: `apiBaseUrl()` picks `API_URL_INTERNAL` when rendering on the server, the API-down notice names the attempted address, and compose keeps a stable service name with `extra_hosts: localhost:host-gateway` | inline |
 
 ## Log
 
@@ -46,3 +47,8 @@ Deliverable: working app, runnable with or without an AI API key, plus a README 
 - L6 (verbatim user decision): "A" — harden the filter instead of leaving it as-is.
 - L7 (evidence): RED observed on 4 new e2e cases before the fix, GREEN after. Final: 15 contracts + 23 API unit + 27 API e2e + 22 web = 87 tests, typecheck and lint clean.
 - L8 (verbatim user request): "cuando termines pon los cambios hechos aqui en un commit aparte"
+- L9 (verbatim user report): "Luego del cambio de ui la evolucion y registros o linea de tiempo no se muestran"
+- L10 (evidence): the UI change was not the cause. Reproduced with the stack up: `docker compose ps` healthy, `GET localhost:3001/check-ins` returns 2 records, yet `GET localhost:3000/` renders the API-down notice with an empty timeline and no chart. Inside the web container `fetch('http://localhost:3001/health')` fails with `ECONNREFUSED` in every form (`localhost`, `127.0.0.1`, `::1`), while `http://api:3001/health` and `http://172.24.0.1:3001/health` both answer 200. The page is server-rendered and the server was asking the browser's address, so the sections that need records were always empty. The same shell served from the host against the same build renders 2 timeline entries, the 4-series chart and the insight, which isolates the failure to the address and not to the markup.
+- L11 (evidence): a second latent defect found while reading compose. `api` published `${API_PORT:-3001}` but let the container listen on the inherited `API_PORT`, which `.env` also sets; changing that value in one place would have moved the listener away from the healthcheck and from `localhost:3001` on the host.
+- L12 (verbatim user decision, option "Config de compose + verificación"): authorize the compose fix (stable `hostname: api`, container `API_PORT: 3001`, `extra_hosts: localhost:host-gateway`, `API_URL_INTERNAL`), the diagnostic notice and a real stack verification.
+- L13 (evidence): RED observed before the fix on the new `apiBaseUrl` case (server path resolved `http://localhost:3001`), GREEN after. Final: 15 contracts + 23 API unit + 27 API e2e + 24 web = 89 tests, typecheck and lint clean. Stack rebuilt: page serves 2 timeline entries, 4 chart series, the insight and the four averages; `api:3001` answers 200 from the web container and `localhost:3001` answers 200 with CORS for `http://localhost:3000` from the host.

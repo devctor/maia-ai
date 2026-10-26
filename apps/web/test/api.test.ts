@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  ApiError,
-  createCheckIn,
-  getLatestInsight,
-  listCheckIns,
-  streamInsight,
-} from "@/lib/api";
+import { ApiError, createCheckIn, getLatestInsight, listCheckIns, streamInsight } from "@/lib/api";
 import {
   errorEnvelope,
   jsonResponse,
@@ -96,7 +90,9 @@ describe("getLatestInsight", () => {
   it("returns null when there is no insight yet", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(jsonResponse(errorEnvelope(404, "NOT_FOUND", "No hay insight"), 404)),
+      vi
+        .fn()
+        .mockResolvedValue(jsonResponse(errorEnvelope(404, "NOT_FOUND", "No hay insight"), 404)),
     );
 
     await expect(getLatestInsight()).resolves.toBeNull();
@@ -139,7 +135,9 @@ describe("streamInsight", () => {
     const envelope = errorEnvelope(422, "INSUFFICIENT_DATA", "Hacen falta más registros");
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(sseResponse([`event: error\ndata: ${JSON.stringify(envelope)}\n\n`])),
+      vi
+        .fn()
+        .mockResolvedValue(sseResponse([`event: error\ndata: ${JSON.stringify(envelope)}\n\n`])),
     );
 
     const errors: ApiError[] = [];
@@ -173,9 +171,11 @@ describe("streamInsight", () => {
   it("throws the ApiError when the stream itself is rejected", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse(errorEnvelope(503, "AI_UNAVAILABLE", "La IA no está disponible"), 503),
-      ),
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(errorEnvelope(503, "AI_UNAVAILABLE", "La IA no está disponible"), 503),
+        ),
     );
 
     await expect(
@@ -186,5 +186,39 @@ describe("streamInsight", () => {
         onError: () => undefined,
       }),
     ).rejects.toMatchObject({ code: "AI_UNAVAILABLE", statusCode: 503 });
+  });
+});
+
+describe("apiBaseUrl", () => {
+  it("addresses the API the server can reach, not the one the browser uses", async () => {
+    // The server rendering of the page runs inside the web container, where `localhost` is that
+    // container and the published host port is unreachable. Pinning both addresses makes the two
+    // vantage points explicit instead of trusting whichever one the environment happens to set.
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:3001");
+    vi.stubEnv("API_URL_INTERNAL", "http://api:3001");
+    vi.stubGlobal("window", undefined);
+
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ items: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listCheckIns()).resolves.toEqual([]);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://api:3001/check-ins?limit=30");
+
+    vi.unstubAllEnvs();
+  });
+
+  it("keeps the browser on the public address", async () => {
+    // jsdom provides `window`, so this is the browser vantage point: a host name that only resolves
+    // on the reader's machine, never the compose service name.
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:3001");
+    vi.stubEnv("API_URL_INTERNAL", "http://api:3001");
+
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ items: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listCheckIns()).resolves.toEqual([]);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:3001/check-ins?limit=30");
+
+    vi.unstubAllEnvs();
   });
 });

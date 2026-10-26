@@ -27,8 +27,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # A stable name inside the network, so the other services never have to depend on the compose
+    # project name, which changes with the checkout directory.
+    hostname: api
     environment:
       NODE_ENV: production
+      # The container port, not the host one. The healthcheck below and every caller on the compose
+      # network use 3001, so inheriting API_PORT from `.env` would move the listener away from them
+      # and leave `localhost:3001` on the host unanswered. Only the published host side moves.
       API_PORT: 3001
       # Inside the compose network the database is addressed by service name, not by host port.
       DATABASE_URL: postgresql://${POSTGRES_USER:-maia}:${POSTGRES_PASSWORD:-maia}@postgres:5432/${POSTGRES_DB:-maia_care}
@@ -67,8 +73,16 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    # `localhost` inside a container is the container. The browser reaches the API through the
+    # published host port, but the server rendering of the page runs here, so both names have to
+    # resolve: the service name from the compose network, and `localhost` to the host gateway.
+    extra_hosts:
+      - "localhost:host-gateway"
     environment:
       NODE_ENV: production
+      # Server-side only: read at request time by the Next.js server rendering this page. It never
+      # reaches the browser bundle, so it is a compose value and not a build argument.
+      API_URL_INTERNAL: http://api:3001
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     ports:
       - "${WEB_PORT:-3000}:3000"

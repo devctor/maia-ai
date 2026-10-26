@@ -1,5 +1,5 @@
 import { Dashboard } from "@/components/Dashboard";
-import { getLatestInsight, listCheckIns } from "@/lib/api";
+import { apiBaseUrl, getLatestInsight, listCheckIns } from "@/lib/api";
 
 /**
  * The page reads live data on every request. The API is a separate service that may not be up
@@ -9,6 +9,17 @@ export const dynamic = "force-dynamic";
 
 const API_DOWN_NOTICE =
   "No se pudo contactar con la API. Se muestra una vista vacía; los registros aparecerán en cuanto la API esté disponible.";
+
+/**
+ * The failed notice names the endpoint that could not be reached.
+ *
+ * An empty dashboard is the same screen whether the API is down or the page is asking the wrong
+ * address, and those two need opposite fixes. Naming the URL turns a blank page into a diagnosis
+ * without exposing anything a user could not already guess from the address bar.
+ */
+function apiDownNotice(): string {
+  return `${API_DOWN_NOTICE} Dirección intentada: ${apiBaseUrl()}`;
+}
 
 export default async function HomePage() {
   const [checkInsResult, insightResult] = await Promise.allSettled([
@@ -21,6 +32,10 @@ export default async function HomePage() {
   const failed = [checkInsResult, insightResult].some((result) => result.status === "rejected");
 
   return (
-    <Dashboard initialCheckIns={checkIns} initialInsight={insight} notice={failed ? API_DOWN_NOTICE : null} />
+    <Dashboard
+      initialCheckIns={checkIns}
+      initialInsight={insight}
+      notice={failed ? apiDownNotice() : null}
+    />
   );
 }
