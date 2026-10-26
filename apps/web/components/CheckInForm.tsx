@@ -54,6 +54,15 @@ const SCALE_VALUES = [1, 2, 3, 4, 5] as const;
  */
 const NEUTRAL_POSITION = 3;
 
+function emptyMetricValues(): MetricValues {
+  return {
+    wellbeing: null,
+    sleepQuality: null,
+    energy: null,
+    stress: null,
+  };
+}
+
 /** Turns the API's `details.issues` into a field -> message map for inline errors. */
 function readIssues(details: Record<string, unknown> | undefined): Record<string, string> {
   const issues = details?.["issues"];
@@ -76,12 +85,7 @@ function readIssues(details: Record<string, unknown> | undefined): Record<string
 
 export function CheckInForm({ onCreated, takenDates }: CheckInFormProps) {
   const [date, setDate] = useState<string>(todayLocalIsoDate);
-  const [values, setValues] = useState<MetricValues>({
-    wellbeing: null,
-    sleepQuality: null,
-    energy: null,
-    stress: null,
-  });
+  const [values, setValues] = useState<MetricValues>(emptyMetricValues);
   const [symptoms, setSymptoms] = useState<Symptom[]>([]);
   const [notes, setNotes] = useState<string>("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -192,6 +196,12 @@ export function CheckInForm({ onCreated, takenDates }: CheckInFormProps) {
     try {
       const created = await createCheckIn(payload);
       setSuccess(`Registro guardado para el ${formatSpanishDate(created.date)}.`);
+      setDate(todayLocalIsoDate());
+      setValues(emptyMetricValues());
+      setSymptoms([]);
+      setNotes("");
+      setFieldErrors({});
+      setDateError(null);
       await onCreated(created);
     } catch (error) {
       if (error instanceof ApiError) {

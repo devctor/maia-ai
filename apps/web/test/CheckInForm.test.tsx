@@ -165,6 +165,40 @@ describe("CheckInForm", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Registro guardado");
   });
 
+  it("resets the fields after the record is saved", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(makeCheckIn(), 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CheckInForm onCreated={vi.fn()} />);
+
+    const dateInput = screen.getByLabelText("Fecha del registro") as HTMLInputElement;
+    const initialDate = dateInput.value;
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayIso = `${yesterday.getFullYear()}-${`${yesterday.getMonth() + 1}`.padStart(2, "0")}-${`${yesterday.getDate()}`.padStart(2, "0")}`;
+
+    await user.clear(dateInput);
+    await user.type(dateInput, yesterdayIso);
+    slideTo(/Bienestar general/, 4);
+    slideTo(/Calidad del sueño/, 2);
+    slideTo(/Energía/, 5);
+    slideTo(/Nivel de estrés/, 1);
+    await user.click(screen.getByLabelText("Dolor de cabeza"));
+    await user.type(screen.getByLabelText(/Notas/), "Dormí poco");
+
+    await user.click(screen.getByRole("button", { name: "Guardar registro" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Registro guardado");
+    expect(dateInput).toHaveValue(initialDate);
+    expect(within(metricGroup(/Bienestar general/)).getByText("Sin seleccionar")).toBeInTheDocument();
+    expect(within(metricGroup(/Calidad del sueño/)).getByText("Sin seleccionar")).toBeInTheDocument();
+    expect(within(metricGroup(/Energía/)).getByText("Sin seleccionar")).toBeInTheDocument();
+    expect(within(metricGroup(/Nivel de estrés/)).getByText("Sin seleccionar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Dolor de cabeza")).not.toBeChecked();
+    expect(screen.getByLabelText(/Notas/)).toHaveValue("");
+  });
+
   it("sends the expected payload when every metric is answered with the position labels", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(makeCheckIn(), 201));
