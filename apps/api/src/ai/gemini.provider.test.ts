@@ -50,6 +50,42 @@ async function captureError(promise: Promise<unknown>): Promise<unknown> {
   );
 }
 
+/**
+ * Builds a provider whose HTTP response is delivered as raw byte slices.
+ *
+ * The slices are handed to the provider exactly as the network would hand them, so a boundary can
+ * fall inside a line, inside the `data:` prefix, or inside the blank line that closes a frame.
+ */
+function byteSplitProvider(chunks: string[]): GeminiAiProvider {
+  const encoder = new TextEncoder();
+  const fetchMock = vi.fn(async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+      },
+    });
+    return new Response(body, { status: 200 });
+  });
+  return new GeminiAiProvider(config, fetchMock);
+}
+
+/** One SSE frame carrying a single text delta, terminated the way the provider terminates it. */
+function textFrame(text: string): string {
+  return `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] })}\n\n`;
+}
+
+async function collectDeltas(chunks: string[]): Promise<{ text: string; deltas: string[] }> {
+  const deltas: string[] = [];
+  const provider = byteSplitProvider(chunks);
+  const result = await provider.generateInsight(input, {
+    onDelta: (delta) => deltas.push(delta),
+  });
+  return { text: result.text, deltas };
+}
+
 describe("GeminiAiProvider", () => {
   it("parses SSE deltas, ignores thought-only frames and handles split frames", async () => {
     const thoughtFrame = `data: ${JSON.stringify({
@@ -145,5 +181,133 @@ describe("GeminiAiProvider", () => {
     );
 
     expect(error).toBeInstanceOf(AiTimeoutError);
+  });
+
+  /**
+   * The provider reads the body with `getReader()`, which returns arbitrary slices: a frame can be
+   * split in the middle of a line, in the middle of the `data:` prefix, or in the middle of the
+   * blank line that closes it. Each of those positions is exercised here, because a bug that only
+   * appears on one of them would silently truncate a real answer.
+   */
+  it("reassembles a frame split inside its payload", async () => {
+    const frame = textFrame('{"summary":"hola"}');
+    const cut = frame.indexOf('"summary') + 3;
+
+    const { text, deltas } = await collectDeltas([frame.slice(0, cut), frame.slice(cut)]);
+
+    expect(text).toBe('{"summary":"hola"}');
+    expect(deltas).toEqual(['{"summary":"hola"}']);
+  });
+
+  it("reassembles a frame split inside the data prefix", async () => {
+    // The boundary lands between `dat` and `a: `, so the reader sees no complete line yet.
+    const frame = textFrame("parcial");
+
+    const { text, deltas } = await collectDeltas([frame.slice(0, 3), frame.slice(3)]);
+
+    expect(text).toBe("parcial");
+    expect(deltas).toEqual(["parcial"]);
+  });
+
+  it("reassembles a frame split inside the blank line that closes it", async () => {
+    // The trailing `\n\n` is the frame terminator. Splitting inside it is the boundary most likely
+    // to drop a frame entirely, because the reader has a full line but no terminator yet.
+    const frame = textFrame("terminador");
+    const cut = frame.length - 1;
+
+    const { text, deltas } = await collectDeltas([frame.slice(0, cut), frame.slice(cut)]);
+
+    expect(text).toBe("terminador");
+    expect(deltas).toEqual(["terminador"]);
+  });
+
+  it("emits deltas in order when one chunk carries several frames", async () => {
+    // A slow network batches frames; the reader must still surface them one by one, in order.
+    const chunks = [textFrame("uno") + textFrame("dos") + textFrame("tres")];
+
+    const { text, deltas } = await collectDeltas(chunks);
+
+    expect(text).toBe("unodos tres".replace(" ", ""));
+    expect(deltas).toEqual(["uno", "dos", "tres"]);
+  });
+
+  it("decodes a multi-byte character split across chunks without corrupting it", async () => {
+    // `decode(value, { stream: true })` exists for exactly this: a UTF-8 sequence cut in half must
+    // not become a replacement character, which would corrupt Spanish accents in the summary.
+    const frame = textFrame("días de sueño");
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(frame);
+    const accentIndex = frame.indexOf("í");
+    const accentByteStart = encoder.encode(frame.slice(0, accentIndex)).length;
+    // Cut one byte into the two-byte `í`, so neither half is valid on its own.
+    const cut = accentByteStart + 1;
+
+    const fetchMock = vi.fn(async () => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes.slice(0, cut));
+          controller.enqueue(bytes.slice(cut));
+          controller.close();
+        },
+      });
+      return new Response(body, { status: 200 });
+    });
+    const provider = new GeminiAiProvider(config, fetchMock);
+    const deltas: string[] = [];
+
+    const result = await provider.generateInsight(input, {
+      onDelta: (delta) => deltas.push(delta),
+    });
+
+    expect(result.text).toBe("días de sueño");
+    expect(deltas).toEqual(["días de sueño"]);
+    expect(result.text).not.toContain("\uFFFD");
+  });
+
+  it("does not emit a delta for a malformed frame, but keeps the ones already emitted", async () => {
+    // One corrupt frame from the provider must not discard the text that already arrived.
+    const chunks = [textFrame("bueno"), "data: {esto no es json}\n\n", textFrame("otro")];
+
+    const { text, deltas } = await collectDeltas(chunks);
+
+    expect(text).toBe("buenootro");
+    expect(deltas).toEqual(["bueno", "otro"]);
+  });
+
+  it("keeps a final frame that arrives without its trailing blank line", async () => {
+    // Dropping it would truncate the JSON, and the parser would then reject an answer that was
+    // actually complete.
+    const truncatedTerminator = textFrame('{"summary":"fin"}').trimEnd();
+
+    const { text, deltas } = await collectDeltas([truncatedTerminator]);
+
+    expect(text).toBe('{"summary":"fin"}');
+    expect(deltas).toEqual(['{"summary":"fin"}']);
+  });
+
+  it("ignores keep-alive comments and non-data lines", async () => {
+    // Proxies inject `:` comments to hold the connection open. They carry no payload and must not
+    // be mistaken for a delta or for the end of the stream.
+    const chunks = [
+      ": keep-alive\n\n",
+      `event: message\n${textFrame("real")}`,
+      ": otro keep-alive\n\n",
+    ];
+
+    const { text, deltas } = await collectDeltas(chunks);
+
+    expect(text).toBe("real");
+    expect(deltas).toEqual(["real"]);
+  });
+
+  it("fails as retryable when the provider sends no usable text", async () => {
+    // Only keep-alives: nothing to show the user. Surfacing it as retryable is what lets
+    // `withRetries` try again instead of the client seeing an empty insight.
+    const provider = byteSplitProvider([": keep-alive\n\n"]);
+
+    const error = await captureError(provider.generateInsight(input));
+
+    expect(error).toBeInstanceOf(AiUnavailableError);
+    expect((error as AiUnavailableError).retryable).toBe(true);
   });
 });
