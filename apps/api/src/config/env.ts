@@ -15,6 +15,11 @@ const envSchema = z
         message: "DATABASE_URL debe ser una URL de PostgreSQL",
       }),
     CORS_ORIGINS: z.string().default("http://localhost:3000"),
+    /**
+     * Mounts the throwing diagnostic routes. Off by default: the error envelope is proven by the
+     * test suite, and a deployed instance must never expose an endpoint that fails on purpose.
+     */
+    DIAGNOSTICS_ENABLED: z.coerce.boolean().default(false),
     DEMO_USER_EMAIL: z.string().email().default("ana@example.com"),
     DEMO_USER_NAME: z.string().min(1).default("Ana"),
 
@@ -54,6 +59,7 @@ export interface AppConfig {
   port: number;
   corsOrigins: string[];
   demoUser: { email: string; name: string };
+  diagnosticsEnabled: boolean;
 }
 
 export interface AiConfig {
@@ -73,6 +79,7 @@ export function appConfigFrom(env: Env): AppConfig {
       .map((origin) => origin.trim())
       .filter(Boolean),
     demoUser: { email: env.DEMO_USER_EMAIL, name: env.DEMO_USER_NAME },
+    diagnosticsEnabled: env.DIAGNOSTICS_ENABLED,
   };
 }
 

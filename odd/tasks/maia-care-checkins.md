@@ -34,9 +34,15 @@ Deliverable: working app, runnable with or without an AI API key, plus a README 
 | T9 | S11 | Docker images for api/web, compose wiring, migration on start | inline |
 | T10 | S13 | README with the five required sections | inline |
 | T11 | S10 | Final verification: typecheck, lint, full suite, real Gemini smoke | verifier |
+| T12 | S7 | Harden the error envelope: extract a single `describeError`/`toErrorResponse` translation, stop forwarding 5xx `HttpException` payloads, normalise non-`Error` throws before logging, drop the Express request augmentation, reuse the translation in the SSE endpoint, and add the guarded `DiagnosticsController` that makes these guarantees observable | inline |
 
 ## Log
 
 - L1 (verbatim user request): "Necesito completar todo lo que esta en @PRD.md el stack es nextjs, nestjs, postgress, drizzle, gemini provider con streaming, pnpm, docker, monorepo. No quiero arquitecturas complejas solo codigo bien ordenado y escalable, en el back por ejmplo usa una arquitectura de capas tradicional. Tienes poco tiempo esto debe ser defendible en una entrevista tecnica."
 - L2 (decision): optional scope = retries + streaming + Docker + chart; no auth. Git initialized with per-unit commits.
 - L3 (evidence): Gemini API key available in the environment; `gemini-3.1-flash-lite` verified to support `streamGenerateContent?alt=sse` together with `responseMimeType: application/json` + `responseJsonSchema` (strict). Default model: `gemini-3.1-flash-lite`.
+- L4 (verbatim user request): "Para los errores de la api usaremos exeption filters"
+- L5 (evidence): the exception filter already existed and was already global (`main.ts:19`); disabling it fails 10 of 22 e2e tests, so "adopt filters" was already true. The real defect: `describe()` forwarded any `HttpException` payload string verbatim, so a 5xx wrapping a driver error would ship a connection string to the client. Confirmed by a differential probe against the base commit (5xx leaked `postgresql://maia:super-secret@db:5432/maia_care`; now `Ocurrió un error inesperado`). No test covered that branch.
+- L6 (verbatim user decision): "A" — harden the filter instead of leaving it as-is.
+- L7 (evidence): RED observed on 4 new e2e cases before the fix, GREEN after. Final: 15 contracts + 23 API unit + 27 API e2e + 22 web = 87 tests, typecheck and lint clean.
+- L8 (verbatim user request): "cuando termines pon los cambios hechos aqui en un commit aparte"

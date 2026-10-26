@@ -16,6 +16,7 @@ const appConfig: AppConfig = {
   port: 3001,
   corsOrigins: ["http://localhost:3000"],
   demoUser: { email: user.email, name: user.displayName },
+  diagnosticsEnabled: false,
 };
 
 describe("UsersService", () => {

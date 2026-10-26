@@ -1,12 +1,8 @@
 import { Body, Controller, Get, Post, Req, Res } from "@nestjs/common";
-import {
-  generateInsightSchema,
-  type GenerateInsightData,
-  type Insight,
-} from "@maia/contracts";
+import { generateInsightSchema, type GenerateInsightData, type Insight } from "@maia/contracts";
 import type { Request, Response } from "express";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
-import { isAppError } from "../common/errors";
+import { toErrorResponse } from "../common/error-response";
 import { UsersService } from "../users/users.service";
 import { InsightsService } from "./insights.service";
 
@@ -71,7 +67,7 @@ export class InsightsController {
     } catch (error) {
       if (response.headersSent) {
         if (!response.writableEnded) {
-          writeEvent(response, "error", toErrorEvent(error));
+          writeEvent(response, "error", toErrorResponse(error, requestIdOf(request)));
           response.end();
         }
         return;
@@ -97,26 +93,18 @@ function writeEvent(response: Response, event: string, data: unknown): void {
   response.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-function toErrorEvent(error: unknown): {
-  statusCode: number;
-  code: string;
-  message: string;
-  requestId: string;
-} {
-  if (isAppError(error)) {
-    return {
-      statusCode: error.statusCode,
-      code: error.code,
-      message: error.message,
-      requestId: "stream",
-    };
+/**
+ * The request id the middleware echoed, read back from the header it wrote.
+ *
+ * An SSE error event must carry the same `requestId` a JSON failure would: a user reporting a broken
+ * stream quotes the id from the event body, and it has to match the log line.
+ */
+function requestIdOf(request: Request): string {
+  const header = request.headers["x-request-id"];
+  if (Array.isArray(header)) {
+    return header[0] ?? "unknown";
   }
-  return {
-    statusCode: 500,
-    code: "INTERNAL_ERROR",
-    message: "Ocurrió un error inesperado",
-    requestId: "stream",
-  };
+  return typeof header === "string" && header.length > 0 ? header : "unknown";
 }
 
 function abortSignalFrom(request: Request): AbortSignal | undefined {

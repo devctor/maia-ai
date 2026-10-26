@@ -70,6 +70,10 @@ let db: Database;
 let connection: DatabaseConnection;
 
 beforeAll(async () => {
+  // The throwing diagnostic routes are off by default, exactly as in a deployment. This suite is the
+  // only caller that turns them on, and the setting is read once when the module graph is built.
+  process.env.DIAGNOSTICS_ENABLED = "true";
+
   // The override must be applied before the module graph is instantiated: `compile()` above it
   // would resolve the real provider and the fake would never be injected.
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -81,7 +85,6 @@ beforeAll(async () => {
   app.use(requestIdMiddleware);
   app.useGlobalFilters(new AllExceptionsFilter());
   await app.init();
-
   db = app.get<Database>(DATABASE);
   connection = app.get<DatabaseConnection>(DATABASE_CONNECTION);
   await runMigrations(db);
@@ -130,15 +133,17 @@ describe("health", () => {
 
 describe("POST /check-ins", () => {
   it("creates a check-in and echoes the stored values", async () => {
-    const response = await request(app.getHttpServer()).post("/check-ins").send({
-      date: "2026-01-05",
-      wellbeing: 4,
-      sleepQuality: 2,
-      energy: 3,
-      stress: 5,
-      symptoms: ["headache", "fatigue"],
-      notes: "  semana intensa  ",
-    });
+    const response = await request(app.getHttpServer())
+      .post("/check-ins")
+      .send({
+        date: "2026-01-05",
+        wellbeing: 4,
+        sleepQuality: 2,
+        energy: 3,
+        stress: 5,
+        symptoms: ["headache", "fatigue"],
+        notes: "  semana intensa  ",
+      });
 
     expect(response.status).toBe(201);
     expect(response.body).toMatchObject({
@@ -441,5 +446,63 @@ describe("request correlation", () => {
       .set("x-request-id", requestId);
 
     expect(response.headers["x-request-id"]).toBe(requestId);
+  });
+});
+
+/**
+ * The envelope is the API's contract with the client, and its second job is to keep internals out of
+ * a response. Both halves need a request that actually fails.
+ *
+ * These tests exist because the previous filter would forward any `HttpException` payload string
+ * verbatim: a route that wrapped a driver error in a 5xx would have shipped a connection string to
+ * the browser. Nothing caught it because no test drove that branch.
+ */
+describe("error envelope", () => {
+  it("never leaks the message or metadata of an unexpected 5xx HttpException", async () => {
+    const response = await request(app.getHttpServer()).get("/diagnostics/http-exception");
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({
+      statusCode: 500,
+      code: "INTERNAL_ERROR",
+      message: "Ocurrió un error inesperado",
+    });
+    expect(response.body.details).toBeUndefined();
+    expect(response.body.requestId).toBeTruthy();
+    // The whole serialised body, not just the fields we remembered to assert.
+    expect(JSON.stringify(response.body)).not.toContain("super-secret");
+    expect(JSON.stringify(response.body)).not.toContain("select * from users");
+  });
+
+  it("keeps the message of a 4xx HttpException, which is meant for the client", async () => {
+    const response = await request(app.getHttpServer()).get("/diagnostics/http-exception-client");
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe("INTERNAL_ERROR");
+    expect(response.body.message).toBe("El recurso pidió algo imposible");
+  });
+
+  it("answers a non-Error throw without crashing and without echoing the value", async () => {
+    const response = await request(app.getHttpServer()).get("/diagnostics/non-error");
+
+    expect(response.status).toBe(500);
+    expect(response.body.code).toBe("INTERNAL_ERROR");
+    expect(response.body.message).toBe("Ocurrió un error inesperado");
+    expect(JSON.stringify(response.body)).not.toContain("gemini-key");
+  });
+
+  it("never puts a stack trace or internal message in the body of a plain Error", async () => {
+    const response = await request(app.getHttpServer()).get("/diagnostics/plain-error");
+
+    expect(response.status).toBe(500);
+    expect(response.body.message).toBe("Ocurrió un error inesperado");
+    expect(JSON.stringify(response.body)).not.toContain("ECONNREFUSED");
+    expect(JSON.stringify(response.body)).not.toContain("at ");
+  });
+
+  it("returns the same envelope shape for every failure", async () => {
+    const { body } = await request(app.getHttpServer()).get("/diagnostics/plain-error");
+
+    expect(Object.keys(body).sort()).toEqual(["code", "message", "requestId", "statusCode"]);
   });
 });

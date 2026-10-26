@@ -2,21 +2,24 @@ import {
   type ArgumentsHost,
   Catch,
   type ExceptionFilter,
-  HttpException,
   HttpStatus,
   Logger,
 } from "@nestjs/common";
-import { ERROR_CODES, type ErrorCode, type ErrorResponse } from "@maia/contracts";
-import type { Request, Response } from "express";
-import { ZodError } from "zod";
-import { AppError, isAppError } from "./errors";
+import type { ErrorResponse } from "@maia/contracts";
+import type { Response } from "express";
+import { describeError } from "./error-response";
 
 /**
- * One place turns anything thrown into the documented error envelope. Without this every module
- * invents its own error body and the UI has to guess.
+ * The last line of the API: whatever escapes a handler becomes the documented error envelope.
+ * Without it every module invents its own error body and the UI has to guess.
  *
- * The rule: the client sees a stable `code` and a useful `message`; unexpected failures never leak
- * stack traces, SQL or provider payloads.
+ * Two responsibilities, deliberately split:
+ * - `describeError` decides what the client may read (see `error-response.ts`);
+ * - this class decides what is logged, at which level, and how a value that is not an `Error`
+ *   (or a response that was already partially written) is handled.
+ *
+ * The request id is read from the header rather than from a mutated request object: it is the same
+ * value the middleware echoed, and it removes this file's dependency on an augmented Express type.
  */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -25,87 +28,65 @@ export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
     const response = http.getResponse<Response>();
-    const request = http.getRequest<Request & { requestId?: string }>();
+    const request = http.getRequest<{
+      method?: string;
+      url?: string;
+      headers?: Record<string, unknown>;
+    }>();
 
-    const { statusCode, code, message, details } = this.describe(exception, request.requestId);
+    const requestId = readRequestId(request.headers);
+    // `toErrorResponse` is not used directly because the level and the payload of the log depend on
+    // whether this failure was deliberate, and that information is part of `describeError`.
+    const described = describeError(exception);
     const body: ErrorResponse = {
-      statusCode,
-      code,
-      message,
-      ...(details ? { details } : {}),
-      requestId: request.requestId ?? "unknown",
+      statusCode: described.statusCode,
+      code: described.code,
+      message: described.message,
+      ...(described.details ? { details: described.details } : {}),
+      requestId,
     };
 
-    if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
-      this.logger.error(
-        `${request.method} ${request.url} -> ${statusCode} ${code}: ${message}`,
-        exception instanceof Error ? exception.stack : undefined,
-      );
+    const summary = `${request.method ?? "?"} ${request.url ?? "?"} -> ${body.statusCode} ${body.code} (requestId=${requestId})`;
+
+    if (body.statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      // The stack goes to the log, never to the client, and `describeThrown` guarantees a readable
+      // string even when something threw a plain object instead of an Error.
+      this.logger.error(summary, describeThrown(exception));
+    } else if (described.expected) {
+      // A rejected request is business as usual; logging it at `error` would hide real failures.
+      this.logger.warn(`${summary}: ${body.message}`);
     } else {
-      this.logger.warn(`${request.method} ${request.url} -> ${statusCode} ${code}: ${message}`);
+      this.logger.warn(summary);
     }
 
     if (response.headersSent) {
+      // An SSE response that already emitted frames cannot become a JSON error; ending it is all
+      // that is left, and the stream controller writes its own `error` event before reaching here.
       response.end();
       return;
     }
-    response.status(statusCode).json(body);
-  }
-
-  private describe(
-    exception: unknown,
-    requestId?: string,
-  ): {
-    statusCode: number;
-    code: ErrorCode;
-    message: string;
-    details?: Record<string, unknown>;
-  } {
-    if (isAppError(exception)) {
-      return {
-        statusCode: exception.statusCode,
-        code: exception.code,
-        message: exception.message,
-        details: exception.details,
-      };
-    }
-
-    if (exception instanceof ZodError) {
-      return {
-        statusCode: HttpStatus.BAD_REQUEST,
-        code: ERROR_CODES.VALIDATION_ERROR,
-        message: "Los datos enviados no son válidos",
-        details: { issues: flattenZodError(exception) },
-      };
-    }
-
-    if (exception instanceof HttpException) {
-      const status = exception.getStatus();
-      const payload = exception.getResponse();
-      return {
-        statusCode: status,
-        code: status === HttpStatus.NOT_FOUND ? ERROR_CODES.NOT_FOUND : ERROR_CODES.INTERNAL_ERROR,
-        message:
-          typeof payload === "string"
-            ? payload
-            : ((payload as { message?: string }).message ?? exception.message),
-      };
-    }
-
-    this.logger.error(`Unhandled exception (requestId=${requestId ?? "unknown"})`, exception);
-    return {
-      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-      code: ERROR_CODES.INTERNAL_ERROR,
-      message: "Ocurrió un error inesperado",
-    };
+    response.status(body.statusCode).json(body);
   }
 }
 
-function flattenZodError(error: ZodError): Array<{ path: string; message: string }> {
-  return error.issues.map((issue) => ({
-    path: issue.path.join("."),
-    message: issue.message,
-  }));
+function readRequestId(headers: Record<string, unknown> | undefined): string {
+  const raw = headers?.["x-request-id"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === "string" && value.length > 0 ? value : "unknown";
 }
 
-export { AppError };
+/**
+ * `Logger.error(message, object)` hands the object to `util.inspect`, which happily walks a thrown
+ * value's properties — including a request options bag holding an API key. Throwing something that
+ * is not an `Error` is legal JavaScript, so it is normalised to a string before it reaches a log.
+ */
+function describeThrown(exception: unknown): string {
+  if (exception instanceof Error) {
+    return exception.stack ?? `${exception.name}: ${exception.message}`;
+  }
+  try {
+    return `Non-Error thrown: ${JSON.stringify(exception)}`;
+  } catch {
+    return "Non-Error thrown: <unserializable>";
+  }
+}
