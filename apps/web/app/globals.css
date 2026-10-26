@@ -395,6 +395,9 @@ input[type="radio"] {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
+  /* Same breathing room the button has below it, where the insight card opens with
+   * `margin-top: var(--space-4)`. */
+  margin-top: var(--space-4);
 }
 
 .button {
