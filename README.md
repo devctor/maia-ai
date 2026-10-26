@@ -24,6 +24,15 @@ docker compose up --build
 Open <http://localhost:3000>. The API listens on <http://localhost:3001>. Migrations run
 automatically when the API container starts.
 
+Host ports are configurable, because 3000 and 3001 are commonly already taken:
+
+```bash
+WEB_PORT=4300 API_PORT=4301 POSTGRES_PORT=6434 docker compose up --build
+```
+
+`CORS_ORIGINS` follows `WEB_PORT` and container names derive from the compose project, so the stack
+never collides with another checkout on the same machine.
+
 ### Locally (hot reload)
 
 ```bash

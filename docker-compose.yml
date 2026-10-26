@@ -1,12 +1,16 @@
+# Names are derived from the compose project, never fixed: a fixed `container_name` collides with
+# any other checkout of this repository on the same host, and prevents running two environments
+# side by side.
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: maia-ai-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-maia}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-maia}
       POSTGRES_DB: ${POSTGRES_DB:-maia_care}
     ports:
+      # Host ports are configurable because 5432, 3000 and 3001 are commonly taken by other
+      # services. The container ports are fixed; only the host side moves.
       - "${POSTGRES_PORT:-5434}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -20,7 +24,6 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    container_name: maia-ai-api
     depends_on:
       postgres:
         condition: service_healthy
@@ -29,7 +32,8 @@ services:
       API_PORT: 3001
       # Inside the compose network the database is addressed by service name, not by host port.
       DATABASE_URL: postgresql://${POSTGRES_USER:-maia}:${POSTGRES_PASSWORD:-maia}@postgres:5432/${POSTGRES_DB:-maia_care}
-      CORS_ORIGINS: http://localhost:3000
+      # The browser calls the API on whatever host port it was published on.
+      CORS_ORIGINS: http://localhost:${WEB_PORT:-3000}
       DEMO_USER_EMAIL: ${DEMO_USER_EMAIL:-ana@example.com}
       DEMO_USER_NAME: ${DEMO_USER_NAME:-Ana}
       AI_PROVIDER: ${AI_PROVIDER:-mock}
@@ -39,7 +43,7 @@ services:
       AI_MAX_ATTEMPTS: ${AI_MAX_ATTEMPTS:-3}
       AI_RETRY_BASE_DELAY_MS: ${AI_RETRY_BASE_DELAY_MS:-400}
     ports:
-      - "3001:3001"
+      - "${API_PORT:-3001}:3001"
     healthcheck:
       test:
         [
@@ -60,7 +64,6 @@ services:
       args:
         # The browser calls the API on the host, so this is the host-facing URL, not the service name.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
-    container_name: maia-ai-web
     depends_on:
       api:
         condition: service_healthy
@@ -68,7 +71,7 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
 
 volumes:
   postgres-data:
