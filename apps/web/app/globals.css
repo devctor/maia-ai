@@ -5,9 +5,13 @@
  * parts than the whole interface. Everything is driven by the variables below, so the calm palette
  * lives in one place.
  *
- * The palette is re-implemented from scratch (no proprietary assets, no external fonts): warm
+ * The palette is re-implemented from scratch (no proprietary assets): warm
  * neutral canvas, white surfaces, deep teal for primary actions and a lime accent, with 16px
  * radii as the default control and card shape.
+ *
+ * Typography mixes two voices. The body text keeps the system sans, which reads cleanly at
+ * small sizes. The display voice is Platypi, self-hosted through `next/font` (see `app/layout.tsx`)
+ * and reserved for the hero headline and the "Resumen" eyebrow.
  */
 
 :root {
@@ -63,6 +67,8 @@
 
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Platypi, self-hosted by `next/font`; the fallback keeps the page readable before it loads. */
+  --font-display: var(--font-platypi), "Platypi", Georgia, serif;
 
   --shadow-card: 0 1px 2px rgba(7, 40, 33, 0.04), 0 10px 28px rgba(7, 40, 33, 0.05);
 
@@ -686,7 +692,9 @@ input[type="radio"] {
 
 .dashboard-display {
   margin: 0;
+  font-family: var(--font-display);
   font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 500;
   line-height: 1.1;
   letter-spacing: -0.03em;
 }
@@ -843,8 +851,9 @@ input[type="radio"] {
 .dashboard-eyebrow {
   margin: 0;
   color: var(--lime);
+  font-family: var(--font-display);
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
