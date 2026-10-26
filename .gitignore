@@ -24,3 +24,7 @@ coverage/
 
 # end-to-end build output
 apps/api/.e2e-dist/
+
+# Local agent tooling artifacts
+.claude/
+skills-lock.json
