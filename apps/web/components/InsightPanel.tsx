@@ -16,23 +16,23 @@ type Status = "idle" | "streaming" | "done" | "error";
 
 /** One actionable sentence per machine code. The UI never has to parse a message to react. */
 const ERROR_COPY: Partial<Record<ErrorCode, string>> = {
-  INSUFFICIENT_DATA:
-    "Registra al menos 2 días de seguimiento antes de generar un insight.",
+  INSUFFICIENT_DATA: "Registra al menos 2 días de seguimiento antes de generar un insight.",
   AI_UNAVAILABLE:
     "El servicio de IA no está disponible ahora. Espera unos segundos e inténtalo de nuevo.",
-  AI_TIMEOUT:
-    "El servicio de IA tardó demasiado en responder. Inténtalo de nuevo en unos minutos.",
+  AI_TIMEOUT: "El servicio de IA tardó demasiado en responder. Inténtalo de nuevo en unos minutos.",
   AI_GUARDRAIL_REJECTED:
     "La respuesta no cumplió las reglas de seguridad y no se generó el insight.",
-  AI_INVALID_RESPONSE:
-    "La respuesta del servicio no tuvo el formato esperado. Inténtalo de nuevo.",
+  AI_INVALID_RESPONSE: "La respuesta del servicio no tuvo el formato esperado. Inténtalo de nuevo.",
 };
 
 function describeError(error: ApiError): string {
   return ERROR_COPY[error.code] ?? error.message;
 }
 
-export function InsightPanel({ initialInsight = null, title = "Insight con IA" }: InsightPanelProps) {
+export function InsightPanel({
+  initialInsight = null,
+  title = "Insight con IA",
+}: InsightPanelProps) {
   const [status, setStatus] = useState<Status>(initialInsight ? "done" : "idle");
   const [insight, setInsight] = useState<Insight | null>(initialInsight);
   // The model streams a JSON document, so the raw text is kept as it arrives and only the summary
@@ -116,7 +116,12 @@ export function InsightPanel({ initialInsight = null, title = "Insight con IA" }
       </p>
 
       <div className="actions">
-        <button className="button" type="button" onClick={() => void handleGenerate()} disabled={status === "streaming"}>
+        <button
+          className="button"
+          type="button"
+          onClick={() => void handleGenerate()}
+          disabled={status === "streaming"}
+        >
           Generar insight
         </button>
         {status === "streaming" ? (
@@ -126,20 +131,72 @@ export function InsightPanel({ initialInsight = null, title = "Insight con IA" }
         ) : null}
       </div>
 
-      {status === "streaming" ? (
-        <div className="stream" role="status" aria-live="polite">
-          <p className="stream-status">generando…</p>
-          {/*
-            While the first token has not arrived there is nothing to read, and a static label does
-            not distinguish "working" from "stuck". The pulse is deliberately indeterminate: we
-            know bytes are coming, we do not know how many.
-          */}
-          {prose.length === 0 ? (
-            <div className="stream-pulse" role="progressbar" aria-label="Generando el insight" />
-          ) : (
-            <p className="stream-prose">{prose}</p>
-          )}
-        </div>
+      {/*
+        One answer, one frame. The section below renders for both the partial and the finished
+        answer, because swapping containers at the last token re-flows the panel under the reader's
+        eyes and reads as the answer being discarded and redrawn. Only its children change: the
+        prose paragraph is the same element from the first token to the end of the stream.
+      */}
+      {status === "streaming" || (status === "done" && insight) ? (
+        <article
+          className="insight"
+          role={status === "streaming" ? "status" : undefined}
+          aria-live={status === "streaming" ? "polite" : undefined}
+        >
+          <h3>Resumen</h3>
+          <p className="insight-summary">
+            {status === "done" && insight ? insight.summary : prose}
+          </p>
+
+          {status === "streaming" ? (
+            <>
+              {/*
+                Before the first token there is nothing to read, and a static label does not
+                distinguish "working" from "stuck". The pulse is deliberately indeterminate: we
+                know bytes are coming, we do not know how many.
+              */}
+              {prose.length === 0 ? (
+                <div
+                  className="stream-pulse"
+                  role="progressbar"
+                  aria-label="Generando el insight"
+                />
+              ) : null}
+              <p className="stream-status">generando…</p>
+            </>
+          ) : null}
+
+          {status === "done" && insight ? (
+            <>
+              <h4>Patrones observados</h4>
+              {insight.patterns.length > 0 ? (
+                <ul className="insight-list">
+                  {insight.patterns.slice(0, INSIGHT_LIST_MAX_ITEMS).map((pattern, index) => (
+                    <li key={`${index}-${pattern}`}>{pattern}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="hint">No se detectaron patrones en estos días.</p>
+              )}
+
+              <h4>Temas para comentar con un profesional</h4>
+              {insight.topicsToDiscuss.length > 0 ? (
+                <ul className="insight-list">
+                  {insight.topicsToDiscuss.slice(0, INSIGHT_LIST_MAX_ITEMS).map((topic, index) => (
+                    <li key={`${index}-${topic}`}>{topic}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="hint">No hay temas propuestos para estos días.</p>
+              )}
+
+              <p className="footnote">
+                Generado con {insight.provider} · {insight.model}
+              </p>
+              <Disclaimer text={insight.disclaimer} />
+            </>
+          ) : null}
+        </article>
       ) : null}
 
       {cancelled ? (
@@ -152,40 +209,6 @@ export function InsightPanel({ initialInsight = null, title = "Insight con IA" }
         <p className="form-error" role="alert">
           {describeError(error)}
         </p>
-      ) : null}
-
-      {status === "done" && insight ? (
-        <article className="insight">
-          <h3>Resumen</h3>
-          <p className="insight-summary">{insight.summary}</p>
-
-          <h4>Patrones observados</h4>
-          {insight.patterns.length > 0 ? (
-            <ul className="insight-list">
-              {insight.patterns.slice(0, INSIGHT_LIST_MAX_ITEMS).map((pattern, index) => (
-                <li key={`${index}-${pattern}`}>{pattern}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="hint">No se detectaron patrones en estos días.</p>
-          )}
-
-          <h4>Temas para comentar con un profesional</h4>
-          {insight.topicsToDiscuss.length > 0 ? (
-            <ul className="insight-list">
-              {insight.topicsToDiscuss.slice(0, INSIGHT_LIST_MAX_ITEMS).map((topic, index) => (
-                <li key={`${index}-${topic}`}>{topic}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="hint">No hay temas propuestos para estos días.</p>
-          )}
-
-          <p className="footnote">
-            Generado con {insight.provider} · {insight.model}
-          </p>
-          <Disclaimer text={insight.disclaimer} />
-        </article>
       ) : null}
     </section>
   );

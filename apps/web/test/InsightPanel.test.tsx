@@ -43,12 +43,14 @@ describe("InsightPanel", () => {
     const insight = makeInsight();
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        sseResponse([
-          'event: token\ndata: {"delta":"Texto en crudo"}\n\n',
-          `event: insight\ndata: ${JSON.stringify(insight)}\n\n`,
-        ]),
-      ),
+      vi
+        .fn()
+        .mockResolvedValue(
+          sseResponse([
+            'event: token\ndata: {"delta":"Texto en crudo"}\n\n',
+            `event: insight\ndata: ${JSON.stringify(insight)}\n\n`,
+          ]),
+        ),
     );
 
     render(<InsightPanel />);
@@ -112,21 +114,53 @@ describe("InsightPanel", () => {
     await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull());
   });
 
+  it("keeps the answer in place when the stream ends", async () => {
+    const user = userEvent.setup();
+    const insight = makeInsight({ summary: "Tu energía ha subido esta semana." });
+    // While tokens arrive the answer is partial, so the structure around it cannot be there yet.
+    // What must not move is the container the prose lives in: swapping a framed stream box for a
+    // frameless article re-flows the panel and reads as the answer being thrown away and redrawn.
+    const { response, open } = gatedSseResponse(
+      `event: token\ndata: ${JSON.stringify({ delta: '{"summary": "Tu energía ha' })}\n\n`,
+      `event: insight\ndata: ${JSON.stringify(insight)}\n\n`,
+    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    const { container } = render(<InsightPanel />);
+    await user.click(screen.getByRole("button", { name: "Generar insight" }));
+
+    const whileStreaming = await screen.findByText("Tu energía ha");
+    expect(container.querySelectorAll(".stream")).toHaveLength(0);
+    expect(whileStreaming.closest(".insight")).not.toBeNull();
+    expect(whileStreaming.classList.contains("insight-summary")).toBe(true);
+
+    open();
+
+    // The same element, same class, same section: the prose grows in place instead of being
+    // replaced by a differently styled twin.
+    const afterStream = await screen.findByText(insight.summary);
+    expect(afterStream).toBe(whileStreaming);
+    expect(afterStream.closest(".insight")).not.toBeNull();
+    expect(screen.queryByText(/generando…/)).toBeNull();
+  });
+
   it("shows the INSUFFICIENT_DATA copy for that error code", async () => {
     const user = userEvent.setup();
     const envelope = errorEnvelope(422, "INSUFFICIENT_DATA", "Hacen falta más registros");
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        sseResponse([`event: error\ndata: ${JSON.stringify(envelope)}\n\n`]),
-      ),
+      vi
+        .fn()
+        .mockResolvedValue(sseResponse([`event: error\ndata: ${JSON.stringify(envelope)}\n\n`])),
     );
 
     render(<InsightPanel />);
     await user.click(screen.getByRole("button", { name: "Generar insight" }));
 
     expect(
-      await screen.findByText("Registra al menos 2 días de seguimiento antes de generar un insight."),
+      await screen.findByText(
+        "Registra al menos 2 días de seguimiento antes de generar un insight.",
+      ),
     ).toBeInTheDocument();
   });
 
