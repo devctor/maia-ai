@@ -17,3 +17,7 @@ coverage/
 .vscode/*
 !.vscode/extensions.json
 .atl/.skill-registry.cache.json
+
+# Local agent tooling, not part of the deliverable
+.agents/
+.atl/
