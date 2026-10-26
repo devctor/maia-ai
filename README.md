@@ -331,7 +331,8 @@ one line of configuration; testing the pipeline needs no network.
 - **Input validation at the boundary.** Zod schemas, `.strict()` so unknown fields are rejected instead
   of silently ignored, plus database `CHECK` constraints as a second line.
 - **Errors do not leak internals.** The envelope exposes a stable code and a Spanish message; details
-  are limited to field paths. Stack traces, SQL and provider payloads stay in server logs.
+  are limited to field paths. Stack traces, SQL and provider payloads stay in server logs, and the 5xx
+  boundary that enforces this is covered by tests rather than by review.
 - **Traceability without exposure.** `requestId` correlates logs with a user report without containing
   any personal data.
 - **Guardrail.** The non-diagnostic control is enforced twice: in the prompt and deterministically after
