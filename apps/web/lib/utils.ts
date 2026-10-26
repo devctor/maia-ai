@@ -52,3 +52,13 @@ export function todayLocalIsoDate(): string {
   const day = `${now.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * Compares two ISO calendar days as plain strings.
+ *
+ * The `YYYY-MM-DD` format sorts lexicographically in the same order it sorts chronologically, so
+ * no Date object is needed and no timezone can shift the day.
+ */
+export function isIsoDateAfter(isoDate: string, otherIsoDate: string): boolean {
+  return isoDate > otherIsoDate;
+}

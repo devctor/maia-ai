@@ -34,6 +34,101 @@ async function clickPosition(
 }
 
 describe("CheckInForm", () => {
+  it("limits the date picker to today", () => {
+    render(<CheckInForm onCreated={vi.fn()} />);
+
+    const input = screen.getByLabelText("Fecha del registro") as HTMLInputElement;
+
+    // The browser uses `max` to grey out the days after today in its own calendar.
+    expect(input).toHaveAttribute("max", expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/));
+    expect(input).not.toHaveAttribute("min");
+  });
+
+  it("refuses to submit a date in the future and never sends it to the API", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CheckInForm onCreated={vi.fn()} />);
+
+    slideTo(/Bienestar general/, 4);
+    slideTo(/Calidad del sueño/, 2);
+    slideTo(/Energía/, 5);
+    slideTo(/Nivel de estrés/, 1);
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowIso = `${tomorrow.getFullYear()}-${`${tomorrow.getMonth() + 1}`.padStart(2, "0")}-${`${tomorrow.getDate()}`.padStart(2, "0")}`;
+
+    await user.clear(screen.getByLabelText("Fecha del registro"));
+    await user.type(screen.getByLabelText("Fecha del registro"), tomorrowIso);
+
+    await user.click(screen.getByRole("button", { name: "Guardar registro" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText("No se pueden registrar fechas futuras.", {
+        selector: ".field-error",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("refuses to submit a date that already holds a record", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const taken = new Date();
+    taken.setDate(taken.getDate() - 2);
+    const takenIso = `${taken.getFullYear()}-${`${taken.getMonth() + 1}`.padStart(2, "0")}-${`${taken.getDate()}`.padStart(2, "0")}`;
+
+    render(<CheckInForm onCreated={vi.fn()} takenDates={new Set([takenIso])} />);
+
+    slideTo(/Bienestar general/, 4);
+    slideTo(/Calidad del sueño/, 2);
+    slideTo(/Energía/, 5);
+    slideTo(/Nivel de estrés/, 1);
+
+    await user.clear(screen.getByLabelText("Fecha del registro"));
+    await user.type(screen.getByLabelText("Fecha del registro"), takenIso);
+
+    await user.click(screen.getByRole("button", { name: "Guardar registro" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText("Ya existe un registro para esa fecha.", {
+        selector: ".field-error",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("tells the user how many days already hold a record", () => {
+    render(<CheckInForm onCreated={vi.fn()} takenDates={new Set(["2025-03-01", "2025-03-02"])} />);
+
+    expect(
+      screen.getByText("Ya hay 2 días registrados. Elige otra fecha para añadir un registro nuevo."),
+    ).toBeInTheDocument();
+  });
+
+  it("accepts a free day and sends it in the payload", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(makeCheckIn(), 201));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CheckInForm onCreated={vi.fn()} takenDates={new Set(["2020-01-01"])} />);
+
+    slideTo(/Bienestar general/, 4);
+    slideTo(/Calidad del sueño/, 2);
+    slideTo(/Energía/, 5);
+    slideTo(/Nivel de estrés/, 1);
+
+    await user.click(screen.getByRole("button", { name: "Guardar registro" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect(JSON.parse(String(init?.body)).date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
   it("sends the expected payload when every metric is answered with the slider", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(makeCheckIn(), 201));

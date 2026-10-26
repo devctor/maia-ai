@@ -10,11 +10,23 @@ import {
   type Symptom,
 } from "@maia/contracts";
 import { ApiError, createCheckIn } from "@/lib/api";
-import { formatSpanishDate, isRecord, todayLocalIsoDate } from "@/lib/utils";
+import {
+  formatSpanishDate,
+  isIsoDateAfter,
+  isRecord,
+  todayLocalIsoDate,
+} from "@/lib/utils";
 
 interface CheckInFormProps {
   /** Called after a successful save so the parent can refresh the list without a page reload. */
   onCreated: (checkIn: CheckIn) => void | Promise<void>;
+  /**
+   * The calendar days that already hold a record.
+   *
+   * The list arrives from the server, so it covers only the records the API returned. A day older
+   * than that list is therefore not known to be taken, and the form lets it through.
+   */
+  takenDates?: ReadonlySet<string>;
 }
 
 type MetricKey = "wellbeing" | "sleepQuality" | "energy" | "stress";
@@ -62,7 +74,7 @@ function readIssues(details: Record<string, unknown> | undefined): Record<string
   return errors;
 }
 
-export function CheckInForm({ onCreated }: CheckInFormProps) {
+export function CheckInForm({ onCreated, takenDates }: CheckInFormProps) {
   const [date, setDate] = useState<string>(todayLocalIsoDate);
   const [values, setValues] = useState<MetricValues>({
     wellbeing: null,
@@ -76,9 +88,43 @@ export function CheckInForm({ onCreated }: CheckInFormProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [dateError, setDateError] = useState<string | null>(null);
+
+  /**
+   * The last day the form accepts.
+   *
+   * A check-in describes a day that already happened, so today is the upper bound. The browser
+   * uses it to grey out the days after today in its own calendar.
+   */
+  const today = todayLocalIsoDate();
 
   function setMetric(key: MetricKey, value: number): void {
     setValues((current) => ({ ...current, [key]: value }));
+  }
+
+  /**
+   * Rejects a date the form does not accept and returns the message to show, if any.
+   *
+   * The browser already greys out future days in its own calendar, but the value can still arrive
+   * from the keyboard or from a typed date, so the same rules are applied here. The check runs on
+   * the day the user picked, not on the whole form, so a rejected date never reaches the API.
+   */
+  function validateDate(candidate: string): string | null {
+    if (!candidate) {
+      return "Elige una fecha para el registro.";
+    }
+    if (isIsoDateAfter(candidate, today)) {
+      return "No se pueden registrar fechas futuras.";
+    }
+    if (takenDates?.has(candidate)) {
+      return "Ya existe un registro para esa fecha.";
+    }
+    return null;
+  }
+
+  function handleDateChange(nextDate: string): void {
+    setDate(nextDate);
+    setDateError(validateDate(nextDate));
   }
 
   function toggleSymptom(symptom: Symptom): void {
@@ -101,6 +147,15 @@ export function CheckInForm({ onCreated }: CheckInFormProps) {
     }
     setSuccess(null);
     setFormError(null);
+
+    const dateProblem = validateDate(date);
+    if (dateProblem) {
+      setDateError(dateProblem);
+      setFieldErrors({ date: dateProblem });
+      setFormError(dateProblem);
+      return;
+    }
+    setDateError(null);
 
     const { wellbeing, sleepQuality, energy, stress } = values;
     if (wellbeing === null || sleepQuality === null || energy === null || stress === null) {
@@ -159,13 +214,21 @@ export function CheckInForm({ onCreated }: CheckInFormProps) {
           name="date"
           type="date"
           value={date}
-          onChange={(event) => setDate(event.target.value)}
-          aria-invalid={fieldErrors["date"] ? true : undefined}
-          aria-describedby={fieldErrors["date"] ? "checkin-date-error" : undefined}
+          max={today}
+          onChange={(event) => handleDateChange(event.target.value)}
+          aria-invalid={dateError ? true : undefined}
+          aria-describedby={dateError ? "checkin-date-error" : undefined}
         />
-        {fieldErrors["date"] ? (
+        {dateError ? (
           <p className="field-error" id="checkin-date-error">
-            {fieldErrors["date"]}
+            {dateError}
+          </p>
+        ) : null}
+        {takenDates && takenDates.size > 0 ? (
+          <p className="hint">
+            {takenDates.size === 1
+              ? "Ya hay 1 día registrado. Elige otra fecha para añadir un registro nuevo."
+              : `Ya hay ${takenDates.size} días registrados. Elige otra fecha para añadir un registro nuevo.`}
           </p>
         ) : null}
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { CheckIn, Insight } from "@maia/contracts";
 import { SYMPTOM_LABELS } from "@maia/contracts";
 import { listCheckIns } from "@/lib/api";
@@ -77,6 +77,17 @@ export function Dashboard({ initialCheckIns, initialInsight, notice }: Dashboard
   const [checkIns, setCheckIns] = useState<CheckIn[]>(initialCheckIns);
   const [listError, setListError] = useState<string | null>(null);
 
+  /**
+   * The days that already hold a record, so the form can keep the user from picking one twice.
+   *
+   * The set is rebuilt whenever the list changes: after a new record is saved, the day it fills
+   * becomes unavailable without the page reloading.
+   */
+  const takenDates = useMemo(
+    () => new Set(checkIns.map((checkIn) => checkIn.date)),
+    [checkIns],
+  );
+
   async function handleCreated(): Promise<void> {
     try {
       setCheckIns(await listCheckIns());
@@ -120,7 +131,7 @@ export function Dashboard({ initialCheckIns, initialInsight, notice }: Dashboard
             aria-labelledby="dashboard-title-registro"
           >
             <h2 id="dashboard-title-registro">El registro de hoy</h2>
-            <CheckInForm onCreated={handleCreated} />
+            <CheckInForm onCreated={handleCreated} takenDates={takenDates} />
           </section>
 
           <section className="dashboard-card">
