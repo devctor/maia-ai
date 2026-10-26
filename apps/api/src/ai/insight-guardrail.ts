@@ -27,16 +27,10 @@ export const DIAGNOSTIC_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp 
 
 /** Checks the text the user will read: summary and every list item. */
 export function assertNonDiagnostic(content: InsightContent): void {
-  const fields: Array<[string, string]> = [
-    ["summary", content.summary],
-    ...content.patterns.map((item, index) => [`patterns[${index}]`, item] as [string, string]),
-    ...content.topicsToDiscuss.map(
-      (item, index) => [`topicsToDiscuss[${index}]`, item] as [string, string],
-    ),
-  ];
+  const texts = [content.summary, ...content.patterns, ...content.topicsToDiscuss];
 
-  for (const [field, text] of fields) {
-    for (const { name, pattern } of DIAGNOSTIC_PATTERNS) {
+  for (const text of texts) {
+    for (const { pattern } of DIAGNOSTIC_PATTERNS) {
       if (pattern.test(normalize(text))) {
         throw new AiGuardrailError(
           "La respuesta de la IA contenía lenguaje diagnóstico o prescriptivo y fue descartada",

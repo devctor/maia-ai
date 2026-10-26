@@ -1,5 +1,4 @@
 import { INSIGHT_WINDOW_SIZE, SYMPTOM_LABELS } from "@maia/contracts";
-import type { CheckInRow } from "../db/schema";
 import type { InsightPromptInput } from "./ai-provider.interface";
 
 /** Notes are capped before leaving the process: a note is free text and can be arbitrarily long. */

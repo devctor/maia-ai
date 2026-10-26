@@ -1,13 +1,21 @@
 import { defineConfig } from "vitest/config";
 
 /**
- * Nest resolves constructor dependencies through `design:paramtypes`, emitted only when TypeScript
- * runs with `experimentalDecorators` and `emitDecoratorMetadata`. Vitest compiles with esbuild by
- * default, which ignores those options; routing the build through the compiler API makes the tests
- * see the same metadata the real build emits.
+ * Nest resolves constructor dependencies through `design:paramtypes` metadata, which only `tsc`
+ * emits. The unit tests here are all pure functions and need no such metadata, so esbuild stays in
+ * charge — but it must parse the decorators used by the modules under test.
  */
 export default defineConfig({
-  esbuild: false,
+  esbuild: {
+    target: "es2022",
+    tsconfigRaw: {
+      compilerOptions: {
+        target: "es2022",
+        experimentalDecorators: true,
+        useDefineForClassFields: false,
+      },
+    },
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
