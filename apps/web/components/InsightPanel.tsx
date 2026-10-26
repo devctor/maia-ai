@@ -167,7 +167,13 @@ export function InsightPanel({
           ) : null}
 
           {status === "done" && insight ? (
-            <>
+            /*
+              These sections can only exist once the answer is validated, so they are injected at
+              the last token. `.insight-detail` gives them one entry transition: without it the card
+              jumps to its final height and the injection reads as a redraw rather than as the rest
+              of the answer settling in.
+            */
+            <div className="insight-detail">
               <h4>Patrones observados</h4>
               {insight.patterns.length > 0 ? (
                 <ul className="insight-list">
@@ -194,7 +200,7 @@ export function InsightPanel({
                 Generado con {insight.provider} · {insight.model}
               </p>
               <Disclaimer text={insight.disclaimer} />
-            </>
+            </div>
           ) : null}
         </article>
       ) : null}

@@ -144,6 +144,37 @@ describe("InsightPanel", () => {
     expect(screen.queryByText(/generando…/)).toBeNull();
   });
 
+  it("reveals the derived sections instead of snapping them in", async () => {
+    const user = userEvent.setup();
+    const insight = makeInsight();
+    // The patterns, the topics and the footer only exist once the answer is validated, so they are
+    // injected at the last token. Injecting them at full opacity makes the card jump and reads as
+    // the page redrawing; a CSS transition on entry is what turns that into a settle.
+    const { response, open } = gatedSseResponse(
+      `event: token\ndata: ${JSON.stringify({ delta: '{"summary": "Un resumen' })}\n\n`,
+      `event: insight\ndata: ${JSON.stringify(insight)}\n\n`,
+    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    const { container } = render(<InsightPanel />);
+    await user.click(screen.getByRole("button", { name: "Generar insight" }));
+    await screen.findByText("Un resumen");
+
+    // Nothing derived exists yet, so nothing can be mid-animation either.
+    expect(container.querySelector(".insight-detail")).toBeNull();
+
+    open();
+
+    const detail = await waitFor(() => {
+      const node = container.querySelector(".insight-detail");
+      expect(node).not.toBeNull();
+      return node as HTMLElement;
+    });
+    // It wraps the whole derived block, so one transition covers every injected section.
+    expect(detail.querySelectorAll("h4").length).toBe(2);
+    expect(detail.textContent).toContain(insight.disclaimer);
+  });
+
   it("shows the INSUFFICIENT_DATA copy for that error code", async () => {
     const user = userEvent.setup();
     const envelope = errorEnvelope(422, "INSUFFICIENT_DATA", "Hacen falta más registros");

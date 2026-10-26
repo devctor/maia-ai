@@ -550,6 +550,33 @@ input[type="radio"] {
   margin-top: var(--space-4);
 }
 
+/*
+ * The derived half of the answer — patterns, topics, footer, disclaimer — is injected when the
+ * stream ends, because none of it exists until the payload is validated. It fades and slides in
+ * instead of appearing at full opacity, so the card settles to its final height rather than
+ * snapping and looking redrawn. `prefers-reduced-motion` removes the movement, never the content.
+ */
+.insight-detail {
+  animation: insight-detail-in 240ms ease-out both;
+}
+
+@keyframes insight-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insight-detail {
+    animation: none;
+  }
+}
+
 .insight-summary {
   font-size: 1.05rem;
 }
