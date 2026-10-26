@@ -62,10 +62,11 @@ pnpm test       # 23 API unit + 20 web unit        (no database, no network)
 pnpm test:e2e   # 22 API end-to-end                (needs `pnpm db:up`, real PostgreSQL)
 ```
 
-All green: **65 tests**.
+All green: **80 tests**.
 
 | Suite | What it proves |
 | --- | --- |
+| Contracts (15) | The rules both apps and the database depend on: bounds, calendar validity, strictness |
 | API unit (23) | Parser tolerance, guardrail, retry/backoff, SSE parsing, prompt data minimisation |
 | API e2e (22) | Real HTTP + real SQL: upsert, unique index, SSE framing, error envelope, provenance |
 | Web unit (20) | Form payload, SSE client assembly, insight states per error code, chart accessibility |
