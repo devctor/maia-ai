@@ -64,21 +64,45 @@ GEMINI_MODEL=gemini-3.1-flash-lite
 If `AI_PROVIDER=gemini` and the key is missing, the API **refuses to start**. A misconfigured provider
 is a deployment error; discovering it while a user waits is worse than discovering it at boot.
 
+### Configuration
+
+Every value is validated once at boot by `config/env.ts`; an invalid environment fails the process
+instead of failing a request. `.env.example` is the reference file.
+
+| Variable | Default | What it controls |
+| --- | --- | --- |
+| `DATABASE_URL` | — (required) | PostgreSQL connection. Must be a `postgres://` or `postgresql://` URL |
+| `API_PORT` / `WEB_PORT` / `POSTGRES_PORT` | `3001` / `3000` / `5434` | Host ports used by `docker-compose.yml`. Overriding them is one command: `WEB_PORT=4300 API_PORT=4301 POSTGRES_PORT=6434 docker compose up` |
+| `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated. The browser calls the API directly, so it must be explicit |
+| `DEMO_USER_EMAIL` / `DEMO_USER_NAME` | `ana@example.com` / `Ana` | The seeded demo user. There is no auth in this case, by design |
+| `DIAGNOSTICS_ENABLED` | `false` | Mounts the throwing diagnostic routes described in *Errors*. The e2e suite is the only caller that turns it on |
+| `AI_PROVIDER` | `mock` | `gemini` or `mock` |
+| `GEMINI_API_KEY` | — | Required when `AI_PROVIDER=gemini`, and never logged |
+| `GEMINI_MODEL` | `gemini-3.1-flash-lite` | Model id sent to the provider |
+| `AI_TIMEOUT_MS` | `20000` | Per-attempt budget, enforced with `AbortController` |
+| `AI_MAX_ATTEMPTS` | `3` | Bounded retries for transient failures only |
+| `AI_RETRY_BASE_DELAY_MS` | `400` | Base for the exponential backoff with jitter |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | Inlined into the browser bundle at build time |
+
+`DIAGNOSTICS_ENABLED=false` is the deployed value and the safe one: the routes answer `404`. Setting
+it to `true` exposes four endpoints that fail on purpose, which is what the error-envelope tests need
+and nothing else should.
+
 ### Tests
 
 ```bash
-pnpm test       # 23 API unit + 20 web unit        (no database, no network)
-pnpm test:e2e   # 22 API end-to-end                (needs `pnpm db:up`, real PostgreSQL)
+pnpm test       # 23 API unit + 22 web unit        (no database, no network)
+pnpm test:e2e   # 27 API end-to-end                (needs `pnpm db:up`, real PostgreSQL)
 ```
 
-All green: **80 tests**.
+All green: **87 tests**.
 
 | Suite | What it proves |
 | --- | --- |
 | Contracts (15) | The rules both apps and the database depend on: bounds, calendar validity, strictness |
 | API unit (23) | Parser tolerance, guardrail, retry/backoff, SSE parsing, prompt data minimisation |
-| API e2e (22) | Real HTTP + real SQL: upsert, unique index, SSE framing, error envelope, provenance |
-| Web unit (20) | Form payload, SSE client assembly, insight states per error code, chart accessibility |
+| API e2e (27) | Real HTTP + real SQL: upsert, unique index, SSE framing, error envelope, provenance |
+| Web unit (22) | Form payload, SSE client assembly, insight states per error code, chart accessibility |
 
 ### API surface
 
@@ -174,15 +198,42 @@ first and returns a helpful message; the database refuses anything that slipped 
 
 ### Errors
 
-One envelope, one place:
+One envelope, one translation:
 
 ```json
 { "statusCode": 422, "code": "INSUFFICIENT_DATA", "message": "…", "details": {}, "requestId": "…" }
 ```
 
 The UI switches on `code`, never on message text. Every response carries `x-request-id`, echoed in logs:
-when a user reports a failure, the id is all you need to find that request. 5xx bodies never contain
-stack traces, SQL or provider payloads.
+when a user reports a failure, the id is all you need to find that request.
+
+`describeError` in `common/error-response.ts` is the only thing that turns a thrown value into a body.
+Two callers share it: the global `AllExceptionsFilter`, and the SSE endpoint, which cannot use a filter
+once the first frame is written. They used to disagree — the same failure answered `NOT_FOUND` over
+JSON and `INTERNAL_ERROR` inside a stream — and a single translation is what makes them agree.
+
+**The disclosure rule is a status boundary, not a judgement call:**
+
+| Thrown | Client sees |
+| --- | --- |
+| `AppError` (deliberate) | Its `code`, `message` and `details`. The message is written for a person; `details` holds field paths and retry signals |
+| `ZodError` | `VALIDATION_ERROR` with the issue list |
+| `HttpException` 4xx | Its own message: a client mistake is something we can explain |
+| `HttpException` 5xx | `INTERNAL_ERROR` and a generic message. The payload is a SQL fragment, a connection string or a provider body — it goes to the log |
+| Anything else | `INTERNAL_ERROR` and a generic message. The thrown value is never read |
+
+5xx bodies never contain stack traces, SQL or provider payloads, and that is enforced by tests rather
+than by review. A value that is not an `Error` is normalised to a string before it reaches the logger,
+because `Logger.error(message, object)` hands the object to `util.inspect` and will happily walk a
+request bag that holds an API key.
+
+The request id is read from the header the middleware wrote, so the filter depends on no framework
+type. `requestId` in an SSE `error` event is the same id as in a JSON failure: both point at one log line.
+
+Those guarantees are only observable through a response, and no production route fails on demand. So
+`DiagnosticsController` mounts four throwing routes that answer `404` unless `DIAGNOSTICS_ENABLED=true`.
+The e2e suite is the only caller that switches it on; a deployment leaves it off, and the endpoint is
+safe to expose either way.
 
 ### Frontend
 
