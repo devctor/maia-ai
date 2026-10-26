@@ -7,6 +7,8 @@ import { Disclaimer } from "./Disclaimer";
 
 interface InsightPanelProps {
   initialInsight?: Insight | null;
+  /** Heading shown above the insight controls and generated result. */
+  title?: string;
 }
 
 type Status = "idle" | "streaming" | "done" | "error";
@@ -29,7 +31,7 @@ function describeError(error: ApiError): string {
   return ERROR_COPY[error.code] ?? error.message;
 }
 
-export function InsightPanel({ initialInsight = null }: InsightPanelProps) {
+export function InsightPanel({ initialInsight = null, title = "Insight con IA" }: InsightPanelProps) {
   const [status, setStatus] = useState<Status>(initialInsight ? "done" : "idle");
   const [insight, setInsight] = useState<Insight | null>(initialInsight);
   const [rawText, setRawText] = useState<string>("");
@@ -84,7 +86,7 @@ export function InsightPanel({ initialInsight = null }: InsightPanelProps) {
 
   return (
     <section className="panel insight-panel">
-      <h2>Insight con IA</h2>
+      <h2>{title}</h2>
       <p className="hint">
         El insight se construye con tus últimos registros. No es un diagnóstico ni sustituye la
         opinión de un profesional.

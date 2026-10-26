@@ -35,6 +35,13 @@ const METRICS: ReadonlyArray<{ key: MetricKey; label: string }> = [
 
 const SCALE_VALUES = [1, 2, 3, 4, 5] as const;
 
+/**
+ * Where the slider thumb rests while the metric is still unanswered. It is only a visual
+ * placeholder: the metric stays unselected (and out of the payload) until the user moves the
+ * thumb or clicks one of the positions.
+ */
+const NEUTRAL_POSITION = 3;
+
 /** Turns the API's `details.issues` into a field -> message map for inline errors. */
 function readIssues(details: Record<string, unknown> | undefined): Record<string, string> {
   const issues = details?.["issues"];
@@ -165,28 +172,48 @@ export function CheckInForm({ onCreated }: CheckInFormProps) {
 
       {METRICS.map((metric) => {
         const errorId = `checkin-${metric.key}-error`;
+        const inputId = `checkin-${metric.key}-slider`;
+        const selected = values[metric.key];
         return (
           <fieldset className="field" key={metric.key}>
             <legend>{metric.label} (1 = muy bajo, 5 = muy alto)</legend>
             <div className="scale">
-              {SCALE_VALUES.map((value) => {
-                const inputId = `checkin-${metric.key}-${value}`;
-                return (
-                  <span className="scale-option" key={value}>
-                    <input
-                      id={inputId}
-                      name={metric.key}
-                      type="radio"
-                      value={value}
-                      checked={values[metric.key] === value}
-                      onChange={() => setMetric(metric.key, value)}
-                      aria-invalid={fieldErrors[metric.key] ? true : undefined}
-                      aria-describedby={fieldErrors[metric.key] ? errorId : undefined}
-                    />
-                    <label htmlFor={inputId}>{value}</label>
-                  </span>
-                );
-              })}
+              <input
+                id={inputId}
+                className={selected === null ? "scale-range scale-range--empty" : "scale-range"}
+                name={metric.key}
+                type="range"
+                min={1}
+                max={5}
+                step={1}
+                value={selected ?? NEUTRAL_POSITION}
+                onChange={(event) => setMetric(metric.key, Number(event.target.value))}
+                /* Clicking the track where the thumb already rests changes no value, so the
+                 * click itself is what turns the neutral placeholder into an answer. */
+                onClick={(event) => setMetric(metric.key, Number(event.currentTarget.value))}
+                aria-label={metric.label}
+                aria-valuetext={selected === null ? "Sin seleccionar" : `${selected} de 5`}
+                aria-invalid={fieldErrors[metric.key] ? true : undefined}
+                aria-describedby={fieldErrors[metric.key] ? errorId : undefined}
+              />
+              <div className="scale-ticks">
+                {SCALE_VALUES.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className="scale-tick"
+                    style={{ left: `${((value - 1) / (SCALE_VALUES.length - 1)) * 100}%` }}
+                    aria-label={`${metric.label}: valor ${value}`}
+                    aria-pressed={selected === value}
+                    onClick={() => setMetric(metric.key, value)}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+              <p className="scale-value" aria-live="polite">
+                {selected === null ? "Sin seleccionar" : `${selected} de 5`}
+              </p>
             </div>
             {fieldErrors[metric.key] ? (
               <p className="field-error" id={errorId}>

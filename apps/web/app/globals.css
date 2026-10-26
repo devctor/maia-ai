@@ -1,20 +1,42 @@
 /*
+ * The Maia visual language applied to the check-in app.
+ *
  * One hand-written stylesheet: the app is small, and a utility framework would be more moving
  * parts than the whole interface. Everything is driven by the variables below, so the calm palette
  * lives in one place.
+ *
+ * The palette is re-implemented from scratch (no proprietary assets, no external fonts): warm
+ * neutral canvas, white surfaces, deep teal for primary actions and a lime accent, with 16px
+ * radii as the default control and card shape.
  */
 
 :root {
-  --bg: #f4f5f8;
+  /* Canvas and surfaces. */
+  --bg: #faf9f8;
   --surface: #ffffff;
-  --surface-muted: #eef1f6;
-  --text: #1d2330;
-  --text-muted: #4d5567;
-  --border: #d3d8e2;
-  --accent: #1f5f8b;
-  --accent-strong: #164a6e;
-  --accent-contrast: #ffffff;
-  --danger: #8c2f39;
+  --surface-muted: #f4f3f1;
+  --surface-elevated: #ecebea;
+
+  /* Ink. */
+  --text: #1a1a1a;
+  --text-muted: #5e5a58;
+  --text-faint: #757170;
+
+  /* Hairlines. */
+  --border: #d2d6d7;
+  --border-subtle: #e9ebeb;
+  --border-strong: #a6adaf;
+
+  /* Deep teal carries every primary action; lime is the accent on top of it. */
+  --accent: #203236;
+  --accent-hover: #263a3c;
+  --accent-strong: #072821;
+  --accent-contrast: #d1fe9f;
+  --lime: #d1fe9f;
+  --lime-soft: #e3fdc6;
+  --lime-text: #3f4c30;
+
+  --danger: #b04528;
   --danger-bg: #fbecee;
 
   /* Okabe-Ito: distinguishable for the most common colour vision deficiencies. */
@@ -22,9 +44,14 @@
   --chart-sleep: #009e73;
   --chart-energy: #e69f00;
   --chart-stress: #cc79a7;
-  --chart-grid: #e2e6ee;
+  --chart-grid: #e9ebeb;
 
-  --radius: 10px;
+  --radius: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 4px;
+  --radius-pill: 999px;
+
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -32,9 +59,16 @@
   --space-5: 1.5rem;
   --space-6: 2rem;
   --space-7: 3rem;
+  --space-8: 4rem;
 
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --shadow-card: 0 1px 2px rgba(7, 40, 33, 0.04), 0 10px 28px rgba(7, 40, 33, 0.05);
+
+  /* The assessment reference measures its column at 612px. */
+  --measure: 612px;
+  --measure-wide: 1200px;
 }
 
 * {
@@ -53,6 +87,7 @@ body {
   font-family: var(--font-sans);
   font-size: 1rem;
   line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
 h1,
@@ -93,39 +128,24 @@ a {
 :focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
-}
-
-.app-shell {
-  max-width: 60rem;
-  margin: 0 auto;
-  padding: var(--space-6) var(--space-4) var(--space-7);
-}
-
-.app-header {
-  margin-bottom: var(--space-6);
-}
-
-.tagline {
-  color: var(--text-muted);
-  margin: 0;
-}
-
-.app-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
+  border-radius: var(--radius-xs);
 }
 
 .app-footer {
-  margin-top: var(--space-7);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
+  margin-top: var(--space-8);
+  padding: var(--space-6) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.app-footer-inner {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
 }
 
 .panel {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   padding: var(--space-5);
 }
@@ -134,10 +154,12 @@ a {
   background: var(--surface-muted);
   border: 1px solid var(--border);
   border-left: 4px solid var(--accent);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   margin: 0;
 }
+
+/* ------------------------------------------------------------------ forms */
 
 .form {
   display: flex;
@@ -175,33 +197,168 @@ input[type="date"],
 input[type="text"],
 textarea {
   width: 100%;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
   font: inherit;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+input[type="date"]:focus,
+input[type="text"]:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(32, 50, 54, 0.12);
+  outline: none;
 }
 
 textarea {
   resize: vertical;
 }
 
+/* The 1..5 scale reads like a slider: drag the thumb, click the track, or click an exact
+ * position under it. */
 .scale {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-.scale-option,
-.symptom-option {
+.scale-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.25rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.scale-range::-webkit-slider-runnable-track {
+  height: 0.375rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+}
+
+.scale-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  /* Centres the thumb on the track. */
+  margin-top: -0.375rem;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 2px rgba(7, 40, 33, 0.25);
+}
+
+.scale-range::-moz-range-track {
+  height: 0.375rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+}
+
+.scale-range::-moz-range-thumb {
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 2px rgba(7, 40, 33, 0.25);
+}
+
+/* Before the first answer the thumb is muted: the readout says so too. */
+.scale-range--empty::-webkit-slider-thumb {
+  background: var(--border-strong);
+}
+
+.scale-range--empty::-moz-range-thumb {
+  background: var(--border-strong);
+}
+
+/* One clickable label per position, lined up with the thumb travel of the track. */
+.scale-ticks {
+  position: relative;
+  height: 1.5rem;
+  /* Half a thumb, so the first and last label line up with the thumb at the extremes. */
+  margin: 0 0.5625rem;
+}
+
+.scale-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.scale-tick:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.scale-tick[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.scale-value {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.symptoms {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
 .symptom-option {
-  min-width: 12rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 11rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  font-size: 0.95rem;
+}
+
+.symptom-option:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--lime-soft);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
 }
 
 .hint {
@@ -219,7 +376,7 @@ textarea {
 .form-error {
   background: var(--danger-bg);
   border: 1px solid var(--danger);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   color: var(--danger);
   padding: var(--space-3) var(--space-4);
   margin: 0;
@@ -228,9 +385,9 @@ textarea {
 .form-success {
   color: var(--accent-strong);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--lime-soft);
   margin: 0;
 }
 
@@ -247,81 +404,48 @@ textarea {
   color: var(--accent-contrast);
   cursor: pointer;
   font: inherit;
-  font-weight: 600;
-  padding: var(--space-2) var(--space-5);
+  font-weight: 700;
+  padding: var(--space-3) var(--space-6);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.button:active:not(:disabled) {
   background: var(--accent-strong);
   border-color: var(--accent-strong);
 }
 
 .button:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  background: var(--surface-elevated);
+  border-color: var(--surface-elevated);
+  color: var(--text-faint);
 }
 
 .button-secondary {
   background: var(--surface);
   color: var(--accent);
+  border-color: var(--border);
 }
 
 .button-secondary:hover:not(:disabled) {
   background: var(--surface-muted);
   color: var(--accent-strong);
-}
-
-.checkin-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.checkin {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--space-4);
-  background: var(--surface-muted);
-}
-
-.checkin-date {
-  margin: 0 0 var(--space-2);
-}
-
-.checkin-metrics {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
-  margin: 0 0 var(--space-2);
-  padding: 0;
-}
-
-.checkin-metric-label {
-  color: var(--text-muted);
-  margin-right: var(--space-1);
-}
-
-.checkin-metric-value {
-  font-weight: 600;
-}
-
-.checkin-symptoms {
-  margin: 0 0 var(--space-2);
-}
-
-.checkin-notes summary {
-  cursor: pointer;
-  color: var(--accent);
+  border-color: var(--border-strong);
 }
 
 .empty-state {
   color: var(--text-muted);
   margin: 0;
 }
+
+/* ------------------------------------------------------------------ chart */
 
 .chart {
   margin: 0;
@@ -348,6 +472,11 @@ textarea {
   stroke-linecap: round;
 }
 
+.chart-marker {
+  stroke: var(--surface);
+  stroke-width: 1.5;
+}
+
 .chart-legend {
   list-style: none;
   display: flex;
@@ -371,10 +500,12 @@ textarea {
   display: inline-block;
 }
 
+/* ----------------------------------------------------------------- insight */
+
 .stream {
   background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   padding: var(--space-4);
   margin-top: var(--space-4);
 }
@@ -413,8 +544,8 @@ textarea {
 
 .disclaimer {
   background: var(--surface-muted);
-  border-left: 4px solid var(--accent);
-  border-radius: var(--radius);
+  border-left: 4px solid var(--lime);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: 0.9rem;
   margin: 0;
@@ -432,6 +563,324 @@ textarea {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* -------------------------------------------------------------- dashboard
+ * The home screen: an editorial header on top (with the brand mark on the left,
+ * above the copy), then two rows of two 50% columns — the check-in form next to
+ * the insight panel, the trend chart next to the timeline of records — and the
+ * summary of the four indicators spanning the full width at the bottom.
+ */
+
+.dashboard {
+  /* Every card of the four shares this height, so the columns line up. */
+  --dashboard-card-height: clamp(28rem, 78vh, 42rem);
+  min-height: 100vh;
+}
+
+.dashboard-container {
+  max-width: var(--measure-wide);
+  margin: 0 auto;
+  padding: 0 var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+}
+
+.dashboard-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dashboard-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 46rem;
+}
+
+/* The brand mark, above the hero copy on the left. */
+.dashboard-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* The brand mark. It keeps its own rule so the header can restyle it without touching the rest
+ * of the card. */
+.dashboard-logo {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: inset 0 0 0 4px var(--lime);
+}
+
+.dashboard-kicker {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dashboard-display {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.dashboard-lede {
+  margin: 0;
+  max-width: 38rem;
+  color: var(--text-muted);
+  font-size: 1.05rem;
+}
+
+/* One row of the layout: two equal columns on desktop, one on narrow screens. */
+.dashboard-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+  align-items: stretch;
+}
+
+.dashboard-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* The four cards share one bounded height; whatever does not fit scrolls inside. */
+  height: var(--dashboard-card-height);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-5);
+}
+
+/* The blocks inside a card keep their natural height; the card is what scrolls. */
+.dashboard-card > * {
+  flex: 0 0 auto;
+}
+
+/* Section titles: a rule under the heading. */
+.dashboard-card > h2,
+.dashboard .insight-panel > h2 {
+  margin: 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+}
+
+/* The insight panel lives inside a card, so it drops its own frame. */
+.dashboard .insight-panel {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.dashboard-figure {
+  margin: 0;
+}
+
+.dashboard-figure figcaption {
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  margin-top: var(--space-3);
+}
+
+.dashboard-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--space-5);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.dashboard-entry {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dashboard-entry-marker {
+  position: absolute;
+  left: calc(-1 * var(--space-5) - 5px);
+  top: 0.45rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow: 0 0 0 3px var(--surface);
+}
+
+.dashboard-entry-date {
+  margin: 0;
+  font-weight: 700;
+}
+
+.dashboard-entry-metrics {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.dashboard-entry-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  font-size: 0.85rem;
+}
+
+.dashboard-entry-metric b {
+  font-weight: 700;
+}
+
+.dashboard-entry-metric span {
+  color: var(--text-muted);
+}
+
+.dashboard-entry-symptoms {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.dashboard-entry-notes summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+/* The summary: the overview tile, spanning the full width. */
+.dashboard-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  color: var(--surface);
+  padding: var(--space-6);
+}
+
+.dashboard-eyebrow {
+  margin: 0;
+  color: var(--lime);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-summary-title {
+  margin: 0;
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+.dashboard-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.dashboard-metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-metric-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--lime);
+}
+
+.dashboard-metric-label {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.dashboard-summary-note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.dashboard-cta {
+  align-self: flex-start;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius);
+  background: var(--lime);
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.dashboard-cta:hover {
+  background: #e3fdc6;
+}
+
+/* The reference ends the form with one wide primary action. */
+.dashboard .form > .button {
+  width: 100%;
+}
+
+.dashboard .insight-panel .actions .button:first-child {
+  flex: 1 1 auto;
+}
+
+/* ------------------------------------------------------------ responsive */
+
+/* Each 50/50 row of the dashboard collapses into one column, keeping the order. */
+@media (max-width: 900px) {
+  .dashboard-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* One column: the cards go back to their natural height, no nested scroll. */
+  .dashboard-card {
+    height: auto;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboard-container {
+    padding: 0 var(--space-4);
+  }
+
+  .dashboard-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

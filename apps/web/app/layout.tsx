@@ -9,20 +9,20 @@ export const metadata: Metadata = {
     "Registro diario de bienestar y seguimiento con IA. Contenido informativo, no diagnóstico médico.",
 };
 
+/**
+ * The shell is intentionally thin: the dashboard owns its own header, so the layout only keeps
+ * the chrome that surrounds it (the disclaimer footer).
+ */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
       <body>
-        <div className="app-shell">
-          <header className="app-header">
-            <h1>Maia Care</h1>
-            <p className="tagline">Tu seguimiento diario de bienestar</p>
-          </header>
-          <main className="app-main">{children}</main>
-          <footer className="app-footer">
+        {children}
+        <footer className="app-footer">
+          <div className="app-footer-inner">
             <Disclaimer />
-          </footer>
-        </div>
+          </div>
+        </footer>
       </body>
     </html>
   );
