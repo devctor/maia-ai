@@ -21,3 +21,6 @@ coverage/
 # Local agent tooling, not part of the deliverable
 .agents/
 .atl/
+
+# end-to-end build output
+apps/api/.e2e-dist/
